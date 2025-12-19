@@ -1,0 +1,14 @@
+{
+  "name": "feedback-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for the Hybrid Showcase Feedback Portal",
+  "main": "script.js",
+"scripts": {
+  "build": "echo 'Building frontend...'"
+},
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "serve": "^14.2.0"
+  }
+}

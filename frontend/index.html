@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hybrid Showcase | Feedback Portal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>🌐 Hybrid Showcase Portal</h1>
+    <p>Share your thoughts and feedback on my project below 👇</p>
+
+    <form id="feedbackForm">
+      <input type="text" id="name" placeholder="Your Name" required />
+      <input type="email" id="email" placeholder="Your Email" required />
+      <textarea id="message" placeholder="Your Feedback..." required></textarea>
+      <button type="submit">Submit Feedback</button>
+    </form>
+
+    <h2>💬 Recent Feedbacks</h2>
+    <ul id="feedbackList"></ul>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.getElementById('feedbackForm');
+      const feedbackList = document.getElementById('feedbackList');
+
+      // Submit feedback
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const name = document.getElementById('name').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const message = document.getElementById('message').value.trim();
+
+        if (!name || !email || !message) return;
+
+        try {
+          const res = await fetch('/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, message })
+          });
+
+          const data = await res.json();
+          form.reset();
+          loadFeedbacks(); // Refresh list
+
+          // ✅ Show thank you message
+          const thankYouMsg = document.createElement('p');
+          thankYouMsg.textContent = '✅ Thank you for your feedback!';
+          thankYouMsg.style.color = 'green';
+          form.appendChild(thankYouMsg);
+
+          // Remove message after 3 seconds
+          setTimeout(() => {
+            thankYouMsg.remove();
+          }, 3000);
+        } catch (err) {
+          alert('❌ Failed to submit feedback');
+        }
+      });
+
+      // Load feedbacks
+      async function loadFeedbacks() {
+        try {
+          const res = await fetch('/feedback');
+          const feedbacks = await res.json();
+
+          feedbackList.innerHTML = '';
+          feedbacks.forEach(fb => {
+            const li = document.createElement('li');
+            li.textContent = `${fb.name} (${fb.email}): ${fb.message}`;
+            feedbackList.appendChild(li);
+          });
+        } catch (err) {
+          feedbackList.innerHTML = '<li>❌ Failed to load feedbacks</li>';
+        }
+      }
+
+      loadFeedbacks();
+    });
+  </script>
+</body>
+</html>

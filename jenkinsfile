@@ -1,0 +1,149 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_NAME   = "mohanreddybodha/feedback"
+    IMAGE_TAG    = "v1"
+    DOCKER_CREDS = "dockerhub-creds"
+    SSH_CREDS    = "ec2-ssh-key"
+  }
+
+  options {
+    timeout(time: 30, unit: 'MINUTES')
+    timestamps()
+    disableConcurrentBuilds()   // professional touch
+  }
+
+  stages {
+
+    stage('Checkout Code') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Prepare Jenkins Agent') {
+      steps {
+        sh '''
+          jq --version || sudo yum install -y jq || sudo apt-get install -y jq
+        '''
+      }
+    }
+
+    stage('Install Dependencies') {
+      parallel {
+        stage('Backend Deps') {
+          steps {
+            sh 'cd backend && npm install'
+          }
+        }
+        stage('Frontend Deps') {
+          steps {
+            sh 'cd frontend && npm install'
+          }
+        }
+      }
+    }
+
+    stage('Build Frontend') {
+      steps {
+        sh '''
+          cd frontend
+          npm run build || echo "Static app detected"
+          mkdir -p ../backend/public
+          cp -r dist/* ../backend/public/ || true
+        '''
+      }
+    }
+
+    stage('Test Backend') {
+      steps {
+        sh 'cd backend && node -c server.js'
+      }
+    }
+
+    stage('Build & Push Docker Image') {
+      steps {
+        script {
+          docker.withRegistry('https://registry.hub.docker.com', DOCKER_CREDS) {
+            sh '''
+              docker build -t $IMAGE_NAME:$IMAGE_TAG .
+              docker push $IMAGE_NAME:$IMAGE_TAG
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Terraform Init & Apply') {
+      steps {
+        dir('terraform') {
+          sh '''
+            terraform init -input=false
+            terraform apply -auto-approve -input=false
+          '''
+        }
+      }
+    }
+
+    stage('Generate Ansible Inventory') {
+      steps {
+        script {
+          def master_ip = sh(
+            script: "cd terraform && terraform output -raw master_private_ip",
+            returnStdout: true
+          ).trim()
+
+          def worker_ips = sh(
+            script: "cd terraform && terraform output -json worker_private_ips | jq -r '.[]'",
+            returnStdout: true
+          ).trim()
+
+          writeFile file: "ansible/inventory.ini", text: """
+[master]
+${master_ip}
+
+[workers]
+${worker_ips}
+
+[all:vars]
+ansible_user=ec2-user
+"""
+        }
+      }
+    }
+
+    stage('Configure Kubernetes Cluster') {
+      steps {
+        sshagent(credentials: [SSH_CREDS]) {
+          dir('ansible') {
+            sh '''
+              ansible-playbook -i inventory.ini common.yml
+              ansible-playbook -i inventory.ini master.yml
+              ansible-playbook -i inventory.ini worker.yml
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy Application to Kubernetes') {
+      steps {
+        sshagent(credentials: [SSH_CREDS]) {
+          dir('ansible') {
+            sh 'ansible-playbook -i inventory.ini deploy-app.yml'
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ CI/CD Pipeline completed successfully"
+    }
+    failure {
+      echo "❌ Pipeline failed. Check logs."
+    }
+  }
+}
