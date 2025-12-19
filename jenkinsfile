@@ -22,14 +22,6 @@ pipeline {
       }
     }
 
-    stage('Prepare Jenkins Agent') {
-      steps {
-        sh '''
-          jq --version || sudo yum install -y jq || sudo apt-get install -y jq
-        '''
-      }
-    }
-
     stage('Install Dependencies') {
       parallel {
         stage('Backend Deps') {
