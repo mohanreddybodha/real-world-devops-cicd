@@ -10,9 +10,11 @@
     # -----------------------------
     # Swap (Kubernetes requirement)
     # -----------------------------
-    - name: Disable swap immediately
+    - name: Disable swap immediately (safe)
       command: swapoff -a
-      ignore_errors: yes
+      register: swapoff_result
+      failed_when: false
+      changed_when: false
 
     - name: Disable swap permanently
       lineinfile:
@@ -36,6 +38,7 @@
       loop:
         - overlay
         - br_netfilter
+      failed_when: false
 
     # -----------------------------
     # Sysctl settings
@@ -55,14 +58,15 @@
     # Container Runtime (containerd)
     # -----------------------------
     - name: Install containerd
-      dnf:
+      package:
         name: containerd
         state: present
 
-    - name: Generate containerd default config if missing
+    - name: Generate containerd default config
       command: containerd config default
       register: containerd_config
       changed_when: false
+      failed_when: false
 
     - name: Write containerd config
       copy:
@@ -86,7 +90,7 @@
     # -----------------------------
     # Kubernetes packages
     # -----------------------------
-    - name: Add Kubernetes repository
+    - name: Add Kubernetes repository (Amazon Linux 2023)
       copy:
         dest: /etc/yum.repos.d/kubernetes.repo
         content: |
@@ -97,17 +101,31 @@
           gpgcheck=1
           gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
         mode: '0644'
+      when: ansible_distribution_major_version | int >= 2023
+
+    - name: Add Kubernetes repository (Amazon Linux 2)
+      copy:
+        dest: /etc/yum.repos.d/kubernetes.repo
+        content: |
+          [kubernetes]
+          name=Kubernetes
+          baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+          enabled=1
+          gpgcheck=1
+          repo_gpgcheck=1
+          gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        mode: '0644'
+      when: ansible_distribution_major_version | int < 2023
 
     - name: Install Kubernetes components
-      dnf:
+      package:
         name:
           - kubelet
           - kubeadm
           - kubectl
         state: present
 
-    - name: Enable and start kubelet
+    - name: Enable kubelet (do not start yet)
       service:
         name: kubelet
-        state: started
         enabled: yes
