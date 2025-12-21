@@ -11,7 +11,7 @@ pipeline {
   options {
     timeout(time: 30, unit: 'MINUTES')
     timestamps()
-    disableConcurrentBuilds()   // professional touch
+    disableConcurrentBuilds()   
   }
 
   stages {
@@ -62,7 +62,7 @@ pipeline {
               docker build -t $IMAGE_NAME:$IMAGE_TAG .
               docker push $IMAGE_NAME:$IMAGE_TAG
             '''
-          }c
+          }
         }
       }
     }
