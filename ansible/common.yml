@@ -4,24 +4,27 @@
 
   vars:
     ansible_python_interpreter: /usr/bin/python3
-  
+
   tasks:
 
     - name: Disable swap immediately
-      command: swapoff -a
+      raw: swapoff -a
+      ignore_errors: yes
 
     - name: Disable swap permanently
-      replace:
-        path: /etc/fstab
-        regexp: '^(.*swap.*)$'
-        replace: '#\1'
+      raw: sed -i.bak '/ swap /s/^/#/' /etc/fstab
 
-    - name: Load kernel modules
+    - name: Load kernel modules config
       copy:
         dest: /etc/modules-load.d/k8s.conf
         content: |
           overlay
           br_netfilter
+
+    - name: Load kernel modules now
+      raw: |
+        modprobe overlay
+        modprobe br_netfilter
 
     - name: Apply sysctl params
       copy:
@@ -31,7 +34,7 @@
           net.ipv4.ip_forward = 1
 
     - name: Apply sysctl
-      command: sysctl --system
+      raw: sysctl --system
 
     - name: Install containerd
       dnf:
@@ -40,7 +43,9 @@
 
     - name: Configure containerd for Kubernetes
       shell: |
-        containerd config default > /etc/containerd/config.toml
+        if [ ! -f /etc/containerd/config.toml ]; then
+          containerd config default > /etc/containerd/config.toml
+        fi
         sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
     - name: Restart containerd
