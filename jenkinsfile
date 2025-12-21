@@ -62,7 +62,7 @@ pipeline {
               docker build -t $IMAGE_NAME:$IMAGE_TAG .
               docker push $IMAGE_NAME:$IMAGE_TAG
             '''
-          }
+          }c
         }
       }
     }
@@ -82,12 +82,12 @@ pipeline {
       steps {
         script {
           def master_ip = sh(
-            script: "cd terraform && terraform output -raw master_private_ip",
+            script: "cd terraform && terraform output -raw master_ip",
             returnStdout: true
           ).trim()
 
           def worker_ips = sh(
-            script: "cd terraform && terraform output -json worker_private_ips | jq -r '.[]'",
+            script: "cd terraform && terraform output -json worker_ips | jq -r '.[]'",
             returnStdout: true
           ).trim()
 
