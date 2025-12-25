@@ -1,26 +1,21 @@
 - hosts: master
   become: yes
+  gather_facts: no  
+
   tasks:
+    - name: Initialize Kubernetes master
+      raw: |
+        kubeadm init \
+          --pod-network-cidr=10.244.0.0/16 \
+          --ignore-preflight-errors=all
 
-    - name: Initialize Kubernetes cluster
-      command: kubeadm init --pod-network-cidr=192.168.0.0/16
-      args:
-        creates: /etc/kubernetes/admin.conf
-
-    - name: Setup kubectl for ec2-user
-      shell: |
+    - name: Setup kubeconfig for ec2-user
+      raw: |
         mkdir -p /home/ec2-user/.kube
         cp /etc/kubernetes/admin.conf /home/ec2-user/.kube/config
         chown ec2-user:ec2-user /home/ec2-user/.kube/config
 
-    - name: Install Calico CNI
-      become_user: ec2-user
-      command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
-
-    - name: Get join command
-      command: kubeadm token create --print-join-command
-      register: join_cmd
-
-    - name: Save join command
-      set_fact:
-        join_command: "{{ join_cmd.stdout }}"
+    - name: Install Flannel network
+      raw: |
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+        kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
