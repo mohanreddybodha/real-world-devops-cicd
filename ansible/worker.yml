@@ -1,7 +1,6 @@
 - hosts: workers
   become: yes
-  gather_facts: no
 
   tasks:
-    - name: Join worker to cluster
-      command: sh /tmp/kubeadm_join.sh
+    - name: Join cluster
+      command: "{{ hostvars[groups['master'][0]].join_command }}"

@@ -1,36 +1,20 @@
 - hosts: all
   become: yes
-  gather_facts: yes
 
   tasks:
-    # Disable swap
-    - name: Disable swap immediately
-      command: swapoff -a
-
-    - name: Disable swap permanently
-      replace:
-        path: /etc/fstab
-        regexp: '(^.*swap.*$)'
-        replace: '# \1'
+    # Swap
+    - name: Disable swap
+      shell: |
+        swapoff -a
+        sed -i '/ swap / s/^/#/' /etc/fstab
 
     # Kernel modules
-    - name: Configure kernel modules
-      copy:
-        dest: /etc/modules-load.d/k8s.conf
-        content: |
-          overlay
-          br_netfilter
-
     - name: Load kernel modules
-      modprobe:
-        name: "{{ item }}"
-        state: present
-      loop:
-        - overlay
-        - br_netfilter
+      shell: |
+        modprobe overlay
+        modprobe br_netfilter
 
-    # Sysctl
-    - name: Configure sysctl
+    - name: Sysctl config
       copy:
         dest: /etc/sysctl.d/k8s.conf
         content: |
@@ -40,63 +24,30 @@
     - name: Apply sysctl
       command: sysctl --system
 
-    # SELinux
-    - name: Set SELinux to permissive
-      command: setenforce 0
-      ignore_errors: yes
-
-    - name: Update SELinux config
-      replace:
-        path: /etc/selinux/config
-        regexp: '^SELINUX=.*'
-        replace: 'SELINUX=permissive'
-
-    # Containerd
-    - name: Enable Amazon Linux extras for containerd
-      command: amazon-linux-extras enable containerd
-
+    # Container runtime
     - name: Install containerd
-      yum:
+      apt:
         name: containerd
         state: present
+        update_cache: yes
 
     - name: Configure containerd
       shell: |
         mkdir -p /etc/containerd
         containerd config default > /etc/containerd/config.toml
         sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-      args:
-        executable: /bin/bash
 
-    - name: Enable and start containerd
-      systemd:
+    - name: Restart containerd
+      service:
         name: containerd
+        state: restarted
         enabled: yes
-        state: started
 
-    # Kubernetes repo
-    - name: Add Kubernetes repo
-      copy:
-        dest: /etc/yum.repos.d/kubernetes.repo
-        content: |
-          [kubernetes]
-          name=Kubernetes
-          baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
-          enabled=1
-          gpgcheck=1
-          gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
-
-    # Kubernetes components
-    - name: Install Kubernetes packages
-      yum:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-        state: present
-
-    - name: Enable and start kubelet
-      systemd:
-        name: kubelet
-        enabled: yes
-        state: started
+    # Kubernetes
+    - name: Install K8s packages
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor -o /usr/share/keyrings/k8s.gpg
+        echo "deb [signed-by=/usr/share/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" > /etc/apt/sources.list.d/k8s.list
+        apt update
+        apt install -y kubelet kubeadm kubectl
+        apt-mark hold kubelet kubeadm kubectl
