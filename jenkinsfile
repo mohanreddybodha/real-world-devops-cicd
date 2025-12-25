@@ -77,6 +77,8 @@ pipeline {
         }
       }
     }
+   
+
 
     stage('Generate Ansible Inventory') {
       steps {
@@ -90,18 +92,27 @@ pipeline {
             script: "cd terraform && terraform output -json worker_ips | jq -r '.[]'",
             returnStdout: true
           ).trim()
-
+          
+          def worker_entries = worker_ips
+            .split('\n')
+            .collect { ip ->
+              "${ip} ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3"
+          }
+          .join('\n')
+          
           writeFile file: "ansible/inventory.ini", text: """
 [master]
-${master_ip}
+${master_ip} ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3
+
 
 [workers]
-${worker_ips}
+${worker_entries}
 
-[all:vars]
-ansible_user=ubuntu
-ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3
 """
+
+
+
+
         }
       }
     }
