@@ -1,6 +1,11 @@
 - hosts: all
   become: yes
   gather_facts: false
+  remote_user: ec2-user
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: '-o LogLevel=ERROR'
 
   tasks:
 
@@ -8,8 +13,7 @@
     # Swap (Kubernetes requirement)
     # -----------------------------
     - name: Disable swap immediately
-      command: swapoff -a
-      ignore_errors: yes
+      shell: swapoff -a || true
 
     - name: Disable swap permanently
       replace:
@@ -27,7 +31,7 @@
           overlay
           br_netfilter
 
-    - name: Load kernel modules now
+    - name: Load kernel modules
       modprobe:
         name: "{{ item }}"
         state: present
@@ -36,7 +40,7 @@
         - br_netfilter
 
     # -----------------------------
-    # Sysctl settings
+    # Sysctl
     # -----------------------------
     - name: Apply sysctl params
       copy:
