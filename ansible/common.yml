@@ -4,14 +4,18 @@
 
   tasks:
 
-    # Swap
+    # -----------------------------
+    # Swap (Kubernetes requirement)
+    # -----------------------------
     - name: Disable swap immediately
       raw: swapoff -a || true
 
     - name: Disable swap permanently
       raw: sed -i.bak '/ swap /s/^/#/' /etc/fstab
 
+    # -----------------------------
     # Kernel modules
+    # -----------------------------
     - name: Configure kernel modules
       raw: |
         mkdir -p /etc/modules-load.d
@@ -25,7 +29,9 @@
         modprobe overlay
         modprobe br_netfilter
 
+    # -----------------------------
     # Sysctl
+    # -----------------------------
     - name: Configure sysctl
       raw: |
         cat <<EOF > /etc/sysctl.d/k8s.conf
@@ -36,29 +42,47 @@
     - name: Apply sysctl
       raw: sysctl --system
 
-    # Container runtime
-    - name: Install containerd
+    # -----------------------------
+    # SELinux (Amazon Linux 2)
+    # -----------------------------
+    - name: Set SELinux to permissive
       raw: |
-        dnf install -y containerd
+        setenforce 0 || true
+        sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config
+
+    # -----------------------------
+    # Container runtime (containerd)
+    # -----------------------------
+    - name: Install and configure containerd
+      raw: |
+        yum install -y containerd
         mkdir -p /etc/containerd
         containerd config default > /etc/containerd/config.toml
         sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-        systemctl enable --now containerd
+        systemctl daemon-reload
+        systemctl enable containerd
+        systemctl restart containerd
 
-    # Kubernetes repo
+    # -----------------------------
+    # Kubernetes repo (SAFE for AL2)
+    # -----------------------------
     - name: Add Kubernetes repo
       raw: |
         cat <<EOF > /etc/yum.repos.d/kubernetes.repo
         [kubernetes]
         name=Kubernetes
-        baseurl=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/
+        baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
         enabled=1
         gpgcheck=1
-        gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
+        gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
         EOF
 
+    # -----------------------------
     # Kubernetes components
+    # -----------------------------
     - name: Install Kubernetes packages
       raw: |
-        dnf install -y kubelet kubeadm kubectl
+        yum install -y kubelet kubeadm kubectl
+        systemctl daemon-reload
         systemctl enable kubelet
+        systemctl restart kubelet
