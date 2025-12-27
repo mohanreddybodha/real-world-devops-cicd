@@ -3,11 +3,19 @@
   gather_facts: yes
 
   tasks:
+
+    - name: Check if node already joined
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+   
     - name: Copy join command from master
       copy:
         src: /tmp/kubeadm_join.sh
         dest: /tmp/kubeadm_join.sh
         mode: '0755'
+      when: not kubelet_conf.stat.exists
 
     - name: Join cluster
       command: sh /tmp/kubeadm_join.sh
+      when: not kubelet_conf.stat.exists
