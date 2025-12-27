@@ -13,6 +13,11 @@
         group: ubuntu
         mode: '0755'
 
+    - name: Remove kubeconfig directory if it exists
+      file:
+        path: /home/ubuntu/.kube/config
+        state: absent
+
     - name: Copy admin kubeconfig for kubectl access
       copy:
         src: /etc/kubernetes/admin.conf
