@@ -5,32 +5,32 @@
 
   tasks:
 
-    - name: Ensure kubeconfig directory exists for ec2-user
+    - name: Ensure kubeconfig directory exists for ubuntu user
       file:
-        path: /home/ec2-user/.kube
+        path: /home/ubuntu/.kube
         state: directory
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
         mode: 0755
 
     - name: Copy admin kubeconfig for kubectl access
       copy:
         src: /etc/kubernetes/admin.conf
-        dest: /home/ec2-user/.kube/config
-        owner: ec2-user
-        group: ec2-user
+        dest: /home/ubuntu/.kube/config
+        owner: ubuntu
+        group: ubuntu
         mode: 0644
         remote_src: yes
 
     - name: Copy Kubernetes manifests to master
       copy:
         src: ../k8s-manifests/
-        dest: /home/ec2-user/k8s-manifests/
-        owner: ec2-user
-        group: ec2-user
+        dest: /home/ubuntu/k8s-manifests/
+        owner: ubuntu
+        group: ubuntu
 
 
     - name: Apply Kubernetes manifests
-      become_user: ec2-user
+      become_user: ubuntu
       shell: |
         kubectl apply -f /home/ec2-user/k8s-manifests/
