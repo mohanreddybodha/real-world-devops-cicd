@@ -11,7 +11,7 @@
         state: directory
         owner: ubuntu
         group: ubuntu
-        mode: 0755
+        mode: '0755'
 
     - name: Copy admin kubeconfig for kubectl access
       copy:
@@ -19,7 +19,7 @@
         dest: /home/ubuntu/.kube/config
         owner: ubuntu
         group: ubuntu
-        mode: 0644
+        mode: '0600'
         remote_src: yes
 
     - name: Copy Kubernetes manifests to master
