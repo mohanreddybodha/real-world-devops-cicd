@@ -11,7 +11,7 @@
     - name: Setup kubeconfig
       command: |
         mkdir -p /home/ubuntu/.kube
-        cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+        cp -f /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
         chown ubuntu:ubuntu /home/ubuntu/.kube/config
 
     - name: Install Flannel
