@@ -9,7 +9,7 @@
         creates: /etc/kubernetes/admin.conf
 
     - name: Setup kubeconfig
-      command: |
+      shell: |
         mkdir -p /home/ubuntu/.kube
         cp -f /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
         chown ubuntu:ubuntu /home/ubuntu/.kube/config
