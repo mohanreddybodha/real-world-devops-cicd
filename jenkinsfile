@@ -137,7 +137,6 @@ ${worker_entries}
         sshagent(credentials: [SSH_CREDS]) {
           dir('ansible') {
             sh '''
-              sed -i "s|{{ IMAGE_NAME }}|${IMAGE_NAME}|g" deploy-app.yml
               sed -i "s|{{ IMAGE_TAG }}|${IMAGE_TAG}|g" deploy-app.yml
               ansible-playbook -i inventory.ini deploy-app.yml
             '''
