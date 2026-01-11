@@ -13,7 +13,7 @@ spec:
         app: app1
     spec:
       containers:
-      - name: app1
-        image: {{ IMAGE_NAME }}:{{ IMAGE_TAG }}
-        ports:
-        - containerPort: 5000
+        - name: app1
+          image: {{ IMAGE_NAME }}:{{ IMAGE_TAG }}
+          ports:
+            - containerPort: 5000
