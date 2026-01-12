@@ -37,5 +37,4 @@
     - name: Apply Kubernetes manifests
       become_user: ubuntu
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/
-      args:
-        chdir: /home/ubuntu/k8s-manifests
+   
