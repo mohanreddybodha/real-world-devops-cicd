@@ -3,12 +3,9 @@
   hosts: master
   become: yes
 
-  vars:
-    manifests_path: /home/ubuntu/k8s-manifests
-
   tasks:
 
-    - name: Ensure kubeconfig directory exists
+    - name: Ensure kubeconfig directory exists for ubuntu user
       file:
         path: /home/ubuntu/.kube
         state: directory
@@ -16,7 +13,12 @@
         group: ubuntu
         mode: '0755'
 
-    - name: Copy admin kubeconfig
+    - name: Remove old kubeconfig if it exists
+      file:
+        path: /home/ubuntu/.kube/config
+        state: absent
+
+    - name: Copy admin kubeconfig for kubectl access
       copy:
         src: /etc/kubernetes/admin.conf
         dest: /home/ubuntu/.kube/config
@@ -25,27 +27,14 @@
         mode: '0600'
         remote_src: yes
 
-    - name: Ensure manifests directory exists
-      file:
-        path: "{{ manifests_path }}"
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-
-    - name: Render Deployment manifest (from k8s-manifests)
-      template:
-        src: ../k8s-manifests/app1-deployment.yml.j2
-        dest: "{{ manifests_path }}/app1-deployment.yml"
-        owner: ubuntu
-        group: ubuntu
-
-    - name: Copy Service manifest
+    - name: Copy Kubernetes manifests to master
       copy:
-        src: ../k8s-manifests/app1-service.yml
-        dest: "{{ manifests_path }}/app1-service.yml"
+        src: ../k8s-manifests/
+        dest: /home/ubuntu/k8s-manifests/
         owner: ubuntu
         group: ubuntu
 
     - name: Apply Kubernetes manifests
       become_user: ubuntu
-      shell: kubectl apply -f {{ manifests_path }}
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/
+   
