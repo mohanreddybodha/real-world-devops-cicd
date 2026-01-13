@@ -81,7 +81,7 @@ resource "aws_instance" "master" {
 # Elastic IP for Master
 ########################################
 resource "aws_eip" "master_eip" {
-  vpc = true
+  domain = "vpc"
 
   tags = {
     Name = "k8s-master-eip"
@@ -114,7 +114,7 @@ resource "aws_instance" "worker" {
 ########################################
 resource "aws_eip" "worker_eip" {
   count = var.worker_count
-  vpc   = true
+  domain = "vpc"
 
   tags = {
     Name = "k8s-worker-eip-${count.index}"
