@@ -62,9 +62,9 @@ resource "aws_security_group" "k8s_sg" {
   }
 }
 
-########################################
+#######################################
 # Master Node
-########################################
+#######################################
 resource "aws_instance" "master" {
   ami                         = var.ami
   instance_type               = "t2.medium"
