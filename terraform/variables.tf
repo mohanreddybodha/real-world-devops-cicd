@@ -5,10 +5,12 @@ variable "region" {
 
 variable "ami" {
   description = "AMI ID for EC2 instances"
+  default =  "ami-0ff91eb5c6fe7cc86"
 }
 
 variable "key_name" {
   description = "SSH key pair name"
+  default = "mohan1"
 }
 
 variable "worker_count" {
