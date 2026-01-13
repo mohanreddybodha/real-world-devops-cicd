@@ -82,6 +82,7 @@ resource "aws_instance" "master" {
 ########################################
 resource "aws_eip" "master_eip" {
   domain = "vpc"
+  instance  = aws_instance.master.id
 
   tags = {
     Name = "k8s-master-eip"
