@@ -137,7 +137,8 @@ ${worker_entries}
       steps {
         sshagent(credentials: [SSH_CREDS]) {
           sh """
-            ssh ubuntu@${MASTER_IP} '
+            ssh -o StrictHostKeyChecking=no
+            ubuntu@${MASTER_IP} '
             helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
             helm repo update
             helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
