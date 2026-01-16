@@ -4,6 +4,20 @@
 
   tasks:
 
+
+    - name: Fix broken dpkg if exists
+      raw: |
+        dpkg --configure -a || true
+
+ 
+    - name: Wait for apt lock to be released
+      raw: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          echo "Waiting for apt lock..."
+          sleep 5
+        done
+
+
     # -------------------------
     # Disable swap
     # -------------------------
