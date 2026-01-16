@@ -161,6 +161,7 @@ ${workers}
       steps {
         sshagent(credentials: [SSH_CREDS]) {
           sh """
+            scp -o StrictHostKeyChecking=no monitoring-values.yaml ubuntu@${MASTER_IP}:/tmp/monitoring-values.yaml
             ssh -o StrictHostKeyChecking=no ubuntu@${MASTER_IP} '
               helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
               helm repo update &&
