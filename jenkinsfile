@@ -1,11 +1,20 @@
 pipeline {
   agent any
 
+  parameters {
+    booleanParam(
+      name: 'RUN_TERRAFORM',
+      defaultValue: false,
+      description: 'Run Terraform apply (enable ONLY when infra changes)'
+    )
+  }
+
   environment {
     IMAGE_NAME   = "mohanreddybodha/feedback"
     IMAGE_TAG    = "v${BUILD_NUMBER}"
     DOCKER_CREDS = "dockerhub-creds"
     SSH_CREDS    = "ec2-ssh-key"
+
     ANSIBLE_HOST_KEY_CHECKING = "False"
   }
 
@@ -17,8 +26,12 @@ pipeline {
 
   stages {
 
+    /* -------------------- CODE -------------------- */
+
     stage('Checkout Code') {
-      steps { checkout scm }
+      steps {
+        checkout scm
+      }
     }
 
     stage('Install Dependencies') {
@@ -36,7 +49,7 @@ pipeline {
       steps {
         sh '''
           cd frontend
-          npm run build || echo "Static app detected"
+          npm run build || echo "Static build skipped"
           mkdir -p ../backend/public
           cp -r dist/* ../backend/public/ || true
         '''
@@ -44,8 +57,12 @@ pipeline {
     }
 
     stage('Test Backend') {
-      steps { sh 'cd backend && node -c server.js' }
+      steps {
+        sh 'cd backend && node -c server.js'
+      }
     }
+
+    /* -------------------- DOCKER -------------------- */
 
     stage('Build & Push Docker Image') {
       steps {
@@ -60,11 +77,12 @@ pipeline {
       }
     }
 
+    /* -------------------- TERRAFORM -------------------- */
+
     stage('Terraform Init & Apply') {
-     // when {
-       //  branch 'main'
-         //changeset "terraform/**"
-     // }
+      when {
+        expression { params.RUN_TERRAFORM == true }
+      }
       steps {
         dir('terraform') {
           sh '''
@@ -74,6 +92,8 @@ pipeline {
         }
       }
     }
+
+    /* -------------------- INVENTORY -------------------- */
 
     stage('Generate Ansible Inventory') {
       steps {
@@ -88,7 +108,7 @@ pipeline {
             returnStdout: true
           ).trim()
 
-          def worker_entries = worker_ips.split('\n')
+          def workers = worker_ips.split('\n')
             .collect { ip ->
               "${ip} ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3"
             }.join('\n')
@@ -98,11 +118,13 @@ pipeline {
 ${env.MASTER_IP} ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3
 
 [workers]
-${worker_entries}
+${workers}
 """
         }
       }
     }
+
+    /* -------------------- ANSIBLE -------------------- */
 
     stage('Configure Kubernetes Cluster') {
       steps {
@@ -133,15 +155,20 @@ ${worker_entries}
       }
     }
 
+    /* -------------------- MONITORING -------------------- */
+
     stage('Deploy Monitoring') {
       steps {
         sshagent(credentials: [SSH_CREDS]) {
           sh """
-            ssh -o StrictHostKeyChecking=no ubuntu@${MASTER_IP} \
-              "helm repo add prometheus-community https://prometheus-community.github.io/helm-charts \
-               helm repo update \
-               helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-              -n monitoring --create-namespace -f monitoring-values.yaml"
+            ssh -o StrictHostKeyChecking=no ubuntu@${MASTER_IP} "
+              helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
+              helm repo update &&
+              helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+                -n monitoring \
+                --create-namespace \
+                -f monitoring-values.yaml
+            "
           """
         }
       }
