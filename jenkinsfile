@@ -80,9 +80,9 @@ pipeline {
     /* -------------------- TERRAFORM -------------------- */
 
     stage('Terraform Init & Apply') {
-      //when {
-        //expression { params.RUN_TERRAFORM == true }
-      //}
+      when {
+        expression { params.RUN_TERRAFORM == true }
+      }
       steps {
         dir('terraform') {
           sh '''
