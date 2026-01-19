@@ -97,11 +97,19 @@
         path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
       register: k8s_key
 
-    - name: Install Kubernetes apt key (only if missing)
+    - name: Download Kubernetes release key
       get_url:
         url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
-        dest: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        dest: /tmp/kubernetes-release.key
         mode: '0644'
+      when: not k8s_key.stat.exists
+
+    - name: Convert Kubernetes key to gpg keyring
+      command: >
+        gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        /tmp/kubernetes-release.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
       when: not k8s_key.stat.exists
 
     - name: Add Kubernetes apt repository
