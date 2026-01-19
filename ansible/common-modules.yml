@@ -61,6 +61,12 @@
         state: present
         update_cache: yes
       when: not containerd_bin.stat.exists
+  
+    - name: Ensure containerd config directory exists
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
 
     - name: Configure containerd cgroup driver
       copy:
