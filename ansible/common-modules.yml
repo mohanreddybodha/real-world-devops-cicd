@@ -4,14 +4,14 @@
   tasks:
 
     # ------------------------
-    # Fix dpkg (safe to re-run)
+    # Fix dpkg (safe)
     # ------------------------
     - name: Fix broken dpkg if exists
       command: dpkg --configure -a
       ignore_errors: yes
 
     # ------------------------
-    # Disable swap (required by k8s)
+    # Disable swap
     # ------------------------
     - name: Disable swap
       command: swapoff -a
@@ -48,7 +48,7 @@
         - { name: net.ipv4.ip_forward, value: 1 }
 
     # ------------------------
-    # Install containerd (guarded)
+    # Containerd
     # ------------------------
     - name: Check containerd
       stat:
@@ -62,12 +62,6 @@
         update_cache: yes
       when: not containerd_bin.stat.exists
 
-    - name: Configure containerd
-      command: containerd config default
-      register: containerd_config
-      changed_when: false
-      when: not containerd_bin.stat.exists
-
     - name: Enable containerd
       systemd:
         name: containerd
@@ -75,20 +69,26 @@
         state: restarted
 
     # ------------------------
-    # Kubernetes repo
+    # Kubernetes repo (aligned with raw history)
     # ------------------------
-    - name: Add Kubernetes apt key
-      get_url:
-        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
-        dest: /etc/apt/keyrings/kubernetes.key
+    - name: Check Kubernetes apt key
+      stat:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      register: k8s_key
+
+    - name: Fail if Kubernetes key is missing
+      fail:
+        msg: "Kubernetes apt key not found. Node must be bootstrapped first."
+      when: not k8s_key.stat.exists
 
     - name: Add Kubernetes repo
       apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes.key] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
         state: present
+        filename: kubernetes
 
     # ------------------------
-    # Install Kubernetes tools (guarded)
+    # Kubernetes binaries
     # ------------------------
     - name: Check kubeadm
       stat:
@@ -107,3 +107,4 @@
 
     - name: Hold Kubernetes packages
       command: apt-mark hold kubelet kubeadm kubectl
+
