@@ -80,7 +80,15 @@ resource "aws_instance" "master" {
   instance_type               = "t2.medium"
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.k8s_sg.id]
-  associate_public_ip_address = false
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -e
+    apt-get update -y
+    apt-get install -y python3 python3-apt curl ca-certificates gnupg
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu
+    chmod 440 /etc/sudoers.d/ubuntu
+  EOF
 
   tags = {
     Name = "k8s-master"
@@ -92,7 +100,6 @@ resource "aws_instance" "master" {
 ########################################
 resource "aws_eip" "master_eip" {
   domain = "vpc"
-  instance  = aws_instance.master.id
 
   tags = {
     Name = "k8s-master-eip"
@@ -113,7 +120,15 @@ resource "aws_instance" "worker" {
   instance_type               = "t2.micro"
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.k8s_sg.id]
-  associate_public_ip_address = false
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -e
+    apt-get update -y
+    apt-get install -y python3 python3-apt curl ca-certificates gnupg
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu
+    chmod 440 /etc/sudoers.d/ubuntu
+  EOF
 
   tags = {
     Name = "k8s-worker-${count.index}"

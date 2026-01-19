@@ -1,0 +1,109 @@
+- hosts: all
+  become: yes
+
+  tasks:
+
+    # ------------------------
+    # Fix dpkg (safe to re-run)
+    # ------------------------
+    - name: Fix broken dpkg if exists
+      command: dpkg --configure -a
+      ignore_errors: yes
+
+    # ------------------------
+    # Disable swap (required by k8s)
+    # ------------------------
+    - name: Disable swap
+      command: swapoff -a
+      ignore_errors: yes
+
+    - name: Comment swap in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].* swap .*)'
+        replace: '# \1'
+
+    # ------------------------
+    # Kernel modules
+    # ------------------------
+    - name: Load kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    # ------------------------
+    # Sysctl
+    # ------------------------
+    - name: Apply sysctl params
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: net.bridge.bridge-nf-call-iptables, value: 1 }
+        - { name: net.ipv4.ip_forward, value: 1 }
+
+    # ------------------------
+    # Install containerd (guarded)
+    # ------------------------
+    - name: Check containerd
+      stat:
+        path: /usr/bin/containerd
+      register: containerd_bin
+
+    - name: Install containerd
+      apt:
+        name: containerd
+        state: present
+        update_cache: yes
+      when: not containerd_bin.stat.exists
+
+    - name: Configure containerd
+      command: containerd config default
+      register: containerd_config
+      changed_when: false
+      when: not containerd_bin.stat.exists
+
+    - name: Enable containerd
+      systemd:
+        name: containerd
+        enabled: yes
+        state: restarted
+
+    # ------------------------
+    # Kubernetes repo
+    # ------------------------
+    - name: Add Kubernetes apt key
+      get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+        dest: /etc/apt/keyrings/kubernetes.key
+
+    - name: Add Kubernetes repo
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes.key] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
+        state: present
+
+    # ------------------------
+    # Install Kubernetes tools (guarded)
+    # ------------------------
+    - name: Check kubeadm
+      stat:
+        path: /usr/bin/kubeadm
+      register: kubeadm_bin
+
+    - name: Install Kubernetes components
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+      when: not kubeadm_bin.stat.exists
+
+    - name: Hold Kubernetes packages
+      command: apt-mark hold kubelet kubeadm kubectl
