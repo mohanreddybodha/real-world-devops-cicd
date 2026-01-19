@@ -61,7 +61,7 @@
         state: present
         update_cache: yes
       when: not containerd_bin.stat.exists
-  
+
     - name: Ensure containerd config directory exists
       file:
         path: /etc/containerd
@@ -83,34 +83,26 @@
         enabled: yes
         state: started
 
-    # ------------------------
-    # Kubernetes repository (IDEMPOTENT)
-    # ------------------------
+    # ==================================================
+    # Kubernetes repository (FIXED – NO GPG ERRORS)
+    # ==================================================
     - name: Ensure keyrings directory exists
       file:
         path: /etc/apt/keyrings
         state: directory
         mode: '0755'
 
-    - name: Check Kubernetes apt key
-      stat:
+    - name: Remove old Kubernetes keys (cleanup)
+      file:
         path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-      register: k8s_key
+        state: absent
 
-    - name: Download Kubernetes release key
-      get_url:
-        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
-        dest: /tmp/kubernetes-release.key
-        mode: '0644'
-      when: not k8s_key.stat.exists
-
-    - name: Convert Kubernetes key to gpg keyring
-      command: >
-        gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-        /tmp/kubernetes-release.key
+    - name: Download and install Kubernetes signing key
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key \
+        | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
       args:
         creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-      when: not k8s_key.stat.exists
 
     - name: Add Kubernetes apt repository
       apt_repository:
