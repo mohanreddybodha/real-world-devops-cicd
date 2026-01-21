@@ -3,33 +3,57 @@
   gather_facts: yes
 
   tasks:
-    - name: Initialize cluster
+
+    - name: Initialize Kubernetes cluster
       command: kubeadm init --pod-network-cidr=10.244.0.0/16
       args:
         creates: /etc/kubernetes/admin.conf
 
-    - name: Setup kubeconfig
-      shell: |
-        mkdir -p /home/ubuntu/.kube
-        cp -f /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
-        chown ubuntu:ubuntu /home/ubuntu/.kube/config
-          
+    - name: Setup kubeconfig for ubuntu user
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Copy admin kubeconfig
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ubuntu/.kube/config
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+        remote_src: yes
+
+    - name: Wait for API server to be reachable
+      shell: kubectl get nodes
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: api_status
+      retries: 15
+      delay: 20
+      until: api_status.rc == 0
+
     - name: Install Helm
-      shell: |
-        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
       args:
         creates: /usr/local/bin/helm
 
-    - name: Install Flannel
-      command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+    - name: Install Flannel CNI
+      command: kubectl apply --validate=false -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        creates: /etc/cni/net.d/10-flannel.conflist
 
-    - name: Get join command
+    - name: Generate join command (once)
       command: kubeadm token create --print-join-command
       register: join_cmd
+      args:
+        creates: /tmp/kubeadm_join.sh
 
-    - name: Save join command to file
+    - name: Save join command
       copy:
         content: "{{ join_cmd.stdout }}"
         dest: /tmp/kubeadm_join.sh

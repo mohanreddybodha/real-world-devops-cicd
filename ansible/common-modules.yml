@@ -4,15 +4,12 @@
   tasks:
 
     # ------------------------
-    # Fix dpkg (safe)
+    # System prerequisites
     # ------------------------
     - name: Fix broken dpkg if exists
       command: dpkg --configure -a
       ignore_errors: yes
 
-    # ------------------------
-    # Disable swap (required by Kubernetes)
-    # ------------------------
     - name: Disable swap
       command: swapoff -a
       ignore_errors: yes
@@ -24,7 +21,7 @@
         replace: '# \1'
 
     # ------------------------
-    # Kernel modules
+    # Kernel + sysctl
     # ------------------------
     - name: Load kernel modules
       modprobe:
@@ -34,9 +31,6 @@
         - overlay
         - br_netfilter
 
-    # ------------------------
-    # Sysctl configuration
-    # ------------------------
     - name: Apply sysctl params
       sysctl:
         name: "{{ item.name }}"
@@ -48,19 +42,19 @@
         - { name: net.ipv4.ip_forward, value: 1 }
 
     # ------------------------
-    # Containerd
+    # Containerd (CORRECT way)
     # ------------------------
-    - name: Check containerd
-      stat:
-        path: /usr/bin/containerd
-      register: containerd_bin
-
     - name: Install containerd
       apt:
         name: containerd
         state: present
         update_cache: yes
-      when: not containerd_bin.stat.exists
+
+    - name: Generate default containerd config if missing
+      command: containerd config default
+      register: containerd_default
+      args:
+        creates: /etc/containerd/config.toml
 
     - name: Ensure containerd config directory exists
       file:
@@ -68,36 +62,33 @@
         state: directory
         mode: '0755'
 
-    - name: Configure containerd cgroup driver
+    - name: Write containerd config with systemd cgroup
       copy:
         dest: /etc/containerd/config.toml
         content: |
           version = 2
+          [plugins."io.containerd.grpc.v1.cri"]
+            sandbox_image = "registry.k8s.io/pause:3.9"
           [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
             SystemdCgroup = true
       notify: Restart containerd
 
-    - name: Enable containerd
+    - name: Enable and start containerd
       systemd:
         name: containerd
         enabled: yes
         state: started
 
-    # ==================================================
-    # Kubernetes repository (FIXED – NO GPG ERRORS)
-    # ==================================================
+    # ------------------------
+    # Kubernetes repo (STABLE)
+    # ------------------------
     - name: Ensure keyrings directory exists
       file:
         path: /etc/apt/keyrings
         state: directory
         mode: '0755'
 
-    - name: Remove old Kubernetes keys (cleanup)
-      file:
-        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-        state: absent
-
-    - name: Download and install Kubernetes signing key
+    - name: Install Kubernetes signing key
       shell: |
         curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key \
         | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -113,11 +104,6 @@
     # ------------------------
     # Kubernetes components
     # ------------------------
-    - name: Check kubeadm
-      stat:
-        path: /usr/bin/kubeadm
-      register: kubeadm_bin
-
     - name: Install Kubernetes components
       apt:
         name:
@@ -126,11 +112,9 @@
           - kubectl
         state: present
         update_cache: yes
-      when: not kubeadm_bin.stat.exists
 
     - name: Hold Kubernetes packages
       command: apt-mark hold kubelet kubeadm kubectl
-      when: not kubeadm_bin.stat.exists
 
   handlers:
     - name: Restart containerd
