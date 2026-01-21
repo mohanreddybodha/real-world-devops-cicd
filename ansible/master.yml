@@ -53,7 +53,7 @@
       args:
         creates: /tmp/kubeadm_join.sh
 
-    - name: Save join command
+    - name: Save join command..
       copy:
         content: "{{ join_cmd.stdout }}"
         dest: /tmp/kubeadm_join.sh
