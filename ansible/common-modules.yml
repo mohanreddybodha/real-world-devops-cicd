@@ -5,7 +5,7 @@
   tasks:
 
     # ==================================================
-    # System prerequisites (SAFE, RE-RUNNABLE)
+    # System prerequisites
     # ==================================================
     - name: Fix broken dpkg if exists
       command: dpkg --configure -a
@@ -22,7 +22,7 @@
         replace: '# \1'
 
     # ==================================================
-    # Kernel modules (IDEMPOTENT)
+    # Kernel modules
     # ==================================================
     - name: Load kernel modules
       modprobe:
@@ -33,7 +33,7 @@
         - br_netfilter
 
     # ==================================================
-    # Sysctl (IDEMPOTENT)
+    # Sysctl
     # ==================================================
     - name: Apply sysctl params
       sysctl:
@@ -71,11 +71,10 @@
         path: /etc/containerd/config.toml
       register: containerd_cfg
 
-    - name: Generate full default containerd config (ONCE)
-      command: containerd config default
-      args:
-        creates: /etc/containerd/config.toml
+    - name: Generate default containerd config (ONCE)
+      shell: containerd config default > /etc/containerd/config.toml
       when: not containerd_cfg.stat.exists
+      notify: Restart containerd
 
     - name: Enable SystemdCgroup in containerd
       replace:
@@ -87,18 +86,12 @@
     - name: Set correct pause image
       replace:
         path: /etc/containerd/config.toml
-        regexp: 'sandbox_image = .*'
+        regexp: 'sandbox_image = ".*"'
         replace: 'sandbox_image = "registry.k8s.io/pause:3.9"'
       notify: Restart containerd
 
-    - name: Enable and start containerd
-      systemd:
-        name: containerd
-        enabled: yes
-        state: started
-
     # ==================================================
-    # Kubernetes repository (CLEAN + STABLE)
+    # Kubernetes repository
     # ==================================================
     - name: Ensure keyrings directory exists
       file:
@@ -106,7 +99,7 @@
         state: directory
         mode: '0755'
 
-    - name: Install Kubernetes signing key (idempotent)
+    - name: Install Kubernetes signing key
       shell: |
         curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key \
         | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -120,7 +113,7 @@
         filename: kubernetes
 
     # ==================================================
-    # Kubernetes binaries (GUARDED)
+    # Kubernetes binaries
     # ==================================================
     - name: Check kubeadm exists
       stat:
@@ -146,3 +139,4 @@
       systemd:
         name: containerd
         state: restarted
+        enabled: yes
