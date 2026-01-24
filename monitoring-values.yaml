@@ -1,5 +1,3 @@
-
-
 prometheus:
   service:
     type: NodePort
@@ -15,28 +13,29 @@ alertmanager:
     type: NodePort
     nodePort: 30083
 
-  config:
-    global:
-      resolve_timeout: 5m
+  alertmanagerSpec:
+    config:
+      global:
+        resolve_timeout: 5m
 
-    route:
-      receiver: slack-notifications
-      group_by: ["alertname", "namespace"]
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 5m
+      route:
+        receiver: slack-notifications
+        group_by: ["alertname", "namespace"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 5m
 
-    receivers:
-      - name: slack-notifications
-        slack_configs:
-          - api_url: "<SLACK_URL>"
-            channel: "#alerts"
-            send_resolved: true
-            title: "{{ .CommonAnnotations.summary }}"
-            text: >-
-              {{ range .Alerts }}
-              *Alert:* {{ .Annotations.summary }}
-              *Description:* {{ .Annotations.description }}
-              *Severity:* {{ .Labels.severity }}
-              *StartsAt:* {{ .StartsAt }}
-              {{ end }}
+      receivers:
+        - name: slack-notifications
+          slack_configs:
+            - api_url: "__SLACK_WEBHOOK__"
+              channel: "#alerts"
+              send_resolved: true
+              title: "{{ .CommonAnnotations.summary }}"
+              text: >-
+                {{ range .Alerts }}
+                *Alert:* {{ .Annotations.summary }}
+                *Description:* {{ .Annotations.description }}
+                *Severity:* {{ .Labels.severity }}
+                *StartsAt:* {{ .StartsAt }}
+                {{ end }}

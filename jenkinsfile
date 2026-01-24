@@ -80,9 +80,6 @@ pipeline {
     /* -------------------- TERRAFORM -------------------- */
 
     stage('Terraform Init & Apply') {
-      //when {
-        //expression { params.RUN_TERRAFORM == true }
-      //}
       steps {
         dir('terraform') {
           sh '''
@@ -154,22 +151,29 @@ ${workers}
       }
     }
 
-    /* -------------------- MONITORING -------------------- */
+    /* -------------------- MONITORING (SLACK ENABLED) -------------------- */
 
     stage('Deploy Monitoring') {
       steps {
-        sshagent(credentials: [SSH_CREDS]) {
-          sh """
-            scp -o StrictHostKeyChecking=no monitoring-values.yaml ubuntu@${MASTER_IP}:/tmp/monitoring-values.yaml
-            ssh -o StrictHostKeyChecking=no ubuntu@${MASTER_IP} '
-              helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
-              helm repo update &&
-              helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-                -n monitoring \
-                --create-namespace \
-                -f /tmp/monitoring-values.yaml
-            '
-          """
+        withCredentials([string(credentialsId: 'SLACK_WEBHOOK_URL', variable: 'SLACK_WEBHOOK_URL')]) {
+          sshagent(credentials: [SSH_CREDS]) {
+            sh """
+              sed "s|__SLACK_WEBHOOK__|$SLACK_WEBHOOK_URL|g" monitoring-values.yaml > monitoring-values-final.yaml
+
+              scp -o StrictHostKeyChecking=no monitoring-values-final.yaml \
+                ubuntu@${MASTER_IP}:/tmp/monitoring-values.yaml
+
+              ssh -o StrictHostKeyChecking=no ubuntu@${MASTER_IP} '
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
+                helm repo update &&
+                helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+                  -n monitoring \
+                  --create-namespace \
+                  -f /tmp/monitoring-values.yaml &&
+                kubectl -n monitoring rollout restart statefulset alertmanager-monitoring-kube-prometheus-alertmanager
+              '
+            """
+          }
         }
       }
     }
@@ -177,7 +181,7 @@ ${workers}
 
   post {
     success {
-      echo "✅ CI/CD + Kubernetes + Monitoring pipeline completed successfully"
+      echo "✅ CI/CD + Kubernetes + Monitoring + Slack Alerts completed successfully"
     }
     failure {
       echo "❌ Pipeline failed. Check logs."
