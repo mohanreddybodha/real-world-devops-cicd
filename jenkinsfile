@@ -159,7 +159,9 @@ ${workers}
                 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
                   -n monitoring \
                   --create-namespace \
-                  -f /tmp/monitoring-values.yaml 
+                  -f /tmp/monitoring-values.yaml \
+                  --timeout 15m \
+                  --wait
               '
             '''
           }
