@@ -22,10 +22,43 @@
     - name: Render monitoring ingress
       template:
         src: ../k8s-manifests/monitoring-ingress.yaml.j2
-        dest: /home/ubuntu/k8s-manifests/monitoring-ingress.yaml      
+        dest: /home/ubuntu/k8s-manifests/monitoring-ingress.yaml
         owner: ubuntu
         group: ubuntu
 
-    - name: Apply Kubernetes manifests
+    # --------------------------------------------------
+    # Apply NON-INGRESS resources first (SAFE)
+    # --------------------------------------------------
+    - name: Apply application deployment
       become_user: ubuntu
-      shell: kubectl apply -f /home/ubuntu/k8s-manifests/
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app1-deployment.yaml
+
+    - name: Apply application service
+      become_user: ubuntu
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app1-service.yaml
+
+    # --------------------------------------------------
+    # Wait for ingress-nginx admission webhook (CRITICAL)
+    # --------------------------------------------------
+    - name: Wait for ingress-nginx admission endpoint to be ready
+      become_user: ubuntu
+      shell: |
+        kubectl get endpoints ingress-nginx-controller-admission \
+          -n ingress-nginx \
+          -o jsonpath='{.subsets[*].addresses[*].ip}'
+      register: admission_ep
+      retries: 20
+      delay: 15
+      until: admission_ep.stdout != ""
+      changed_when: false
+
+    # --------------------------------------------------
+    # Apply ingress LAST (NO WEBHOOK FAILURES)
+    # --------------------------------------------------
+    - name: Apply monitoring ingress
+      become_user: ubuntu
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/monitoring-ingress.yaml
+
+    - name: Apply application ingress
+      become_user: ubuntu
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-ingress.yaml
