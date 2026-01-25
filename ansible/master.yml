@@ -94,6 +94,36 @@
       when: not flannel_conf.stat.exists
 
     # --------------------------------------------------
+    # Wait for node to become Ready (CNI required)
+    # --------------------------------------------------
+    - name: Wait for master node to be Ready
+      become_user: ubuntu
+      shell: kubectl get nodes --no-headers | grep -v NotReady
+      retries: 20
+      delay: 15
+      register: node_ready
+      until: node_ready.rc == 0
+      changed_when: false
+
+    # --------------------------------------------------
+    # Check if ingress-nginx namespace exists
+    # --------------------------------------------------
+    - name: Check if ingress-nginx namespace exists
+      become_user: ubuntu
+      command: kubectl get ns ingress-nginx
+      register: ingress_ns
+      failed_when: false
+      changed_when: false
+
+    # --------------------------------------------------
+    # Install NGINX Ingress Controller (ONLY ONCE)
+    # --------------------------------------------------
+    - name: Install NGINX Ingress Controller
+      become_user: ubuntu
+      shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+      when: ingress_ns.rc != 0
+
+    # --------------------------------------------------
     # Generate join command (SAFE & REUSABLE)
     # --------------------------------------------------
     - name: Check if join command already exists

@@ -1,20 +1,21 @@
-prometheus:
-  service:
-    type: NodePort
-    nodePort: 30081
-
 grafana:
-  service:
-    type: NodePort
-    nodePort: 30082
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
+
+prometheus:
+  prometheusSpec:
+    routePrefix: /prometheus
+    externalUrl: "/prometheus/"
 
 alertmanager:
   enabled: true
-  service:
-    type: NodePort
-    nodePort: 30083
 
-  # The configuration must be under this 'config' block for the Helm chart
+  alertmanagerSpec:
+    routePrefix: /alertmanager
+    externalUrl: "/alertmanager/"
+
   config:
     global:
       resolve_timeout: 5m

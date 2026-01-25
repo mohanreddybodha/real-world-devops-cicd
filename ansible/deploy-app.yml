@@ -2,28 +2,8 @@
 - name: Deploy application to Kubernetes cluster
   hosts: master
   become: yes
-  vars:
-    IMAGE_NAME: "{{ lookup('env','IMAGE_NAME') }}"
-    IMAGE_TAG: "{{ lookup('env','IMAGE_TAG') }}"
-
+  
   tasks:
-
-    - name: Ensure kubeconfig directory exists
-      file:
-        path: /home/ubuntu/.kube
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
-
-    - name: Copy admin kubeconfig
-      copy:
-        src: /etc/kubernetes/admin.conf
-        dest: /home/ubuntu/.kube/config
-        owner: ubuntu
-        group: ubuntu
-        mode: '0600'
-        remote_src: yes
 
     - name: Copy manifests
       copy:
@@ -34,10 +14,17 @@
 
     - name: Render Deployment template
       template:
-        src: ../k8s-manifests/app1-deployment.yml.j2
-        dest: /home/ubuntu/k8s-manifests/app1-deployment.yml
+        src: ../k8s-manifests/app1-deployment.yaml.j2
+        dest: /home/ubuntu/k8s-manifests/app1-deployment.yaml
         owner: ubuntu
         group: ubuntu
+
+    -name: Render monitoring ingress
+     template:
+       src: ../k8s-manifests/monitoring-ingress.yaml.j2
+       dest: /home/ubuntu/k8s-manifests/monitoring-ingress.yaml      
+       owner: ubuntu
+       group: ubuntu
 
     - name: Apply Kubernetes manifests
       become_user: ubuntu

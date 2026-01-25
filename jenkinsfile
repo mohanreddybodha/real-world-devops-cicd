@@ -143,8 +143,9 @@ ${workers}
           dir('ansible') {
             sh """
               ansible-playbook -i inventory.ini deploy-app.yml \
-                -e image_name=${IMAGE_NAME} \
-                -e image_tag=${IMAGE_TAG}
+                -e IMAGE_NAME=${IMAGE_NAME} \
+                -e IMAGE_TAG=${IMAGE_TAG} \
+                -e ADMIN_IP_CIDR=${params.ADMIN_IP_CIDR}
             """
           }
         }
