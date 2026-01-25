@@ -137,6 +137,39 @@ ${workers}
       }
     }
 
+    /* -------------------- MONITORING (BEFORE APP) -------------------- */
+
+    stage('Deploy Monitoring') {
+      steps {
+        withCredentials([string(credentialsId: 'SLACK_WEBHOOK_URL', variable: 'SLACK_WEBHOOK_URL')]) {
+          sshagent(credentials: [SSH_CREDS]) {
+            sh '''
+              sed "s|__SLACK_WEBHOOK__|$SLACK_WEBHOOK_URL|g" monitoring-values.yaml > monitoring-values-final.yaml
+
+              scp -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null \
+                  monitoring-values-final.yaml \
+                ubuntu@${MASTER_IP}:/tmp/monitoring-values.yaml
+
+              ssh -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null \
+                  ubuntu@${MASTER_IP} '
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
+                helm repo update &&
+                helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+                  -n monitoring \
+                  --create-namespace \
+                  -f /tmp/monitoring-values.yaml &&
+                kubectl -n monitoring rollout restart statefulset alertmanager-monitoring-kube-prometheus-alertmanager
+              '
+            '''
+          }
+        }
+      }
+    }
+
+    /* -------------------- APPLICATION -------------------- */
+
     stage('Deploy Application to Kubernetes') {
       steps {
         sshagent(credentials: [SSH_CREDS]) {
@@ -146,33 +179,6 @@ ${workers}
                 -e IMAGE_NAME=${IMAGE_NAME} \
                 -e IMAGE_TAG=${IMAGE_TAG} \
                 -e ADMIN_IP_CIDR=${params.ADMIN_IP_CIDR}
-            """
-          }
-        }
-      }
-    }
-
-    /* -------------------- MONITORING (SLACK ENABLED) -------------------- */
-
-    stage('Deploy Monitoring') {
-      steps {
-        withCredentials([string(credentialsId: 'SLACK_WEBHOOK_URL', variable: 'SLACK_WEBHOOK_URL')]) {
-          sshagent(credentials: [SSH_CREDS]) {
-            sh """
-              sed "s|__SLACK_WEBHOOK__|$SLACK_WEBHOOK_URL|g" monitoring-values.yaml > monitoring-values-final.yaml
-
-              scp -o StrictHostKeyChecking=no monitoring-values-final.yaml \
-                ubuntu@${MASTER_IP}:/tmp/monitoring-values.yaml
-
-              ssh -o StrictHostKeyChecking=no ubuntu@${MASTER_IP} '
-                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
-                helm repo update &&
-                helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-                  -n monitoring \
-                  --create-namespace \
-                  -f /tmp/monitoring-values.yaml &&
-                kubectl -n monitoring rollout restart statefulset alertmanager-monitoring-kube-prometheus-alertmanager
-              '
             """
           }
         }
