@@ -20,13 +20,20 @@ alertmanager:
 
       route:
         receiver: slack-notifications
-        group_by: ["alertname", "namespace"]
+        group_by:
+          - alertname
+          - namespace
         group_wait: 10s
         group_interval: 1m
         repeat_interval: 5m
-        routes: []
+        routes:
+          - matchers:
+              - alertname="Watchdog"
+            receiver: null
 
       receivers:
+        - name: null
+
         - name: slack-notifications
           slack_configs:
             - api_url: "__SLACK_WEBHOOK__"
