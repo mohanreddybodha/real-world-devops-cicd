@@ -101,6 +101,11 @@ pipeline {
             returnStdout: true
           ).trim()
 
+          env.VPC_ID = sh(
+            script: "cd terraform && terraform output -raw vpc_id",
+            returnStdout: true
+          ).trim()
+
           def worker_ips = sh(
             script: "cd terraform && terraform output -json worker_ips | jq -r '.[]'",
             returnStdout: true
@@ -130,7 +135,10 @@ ${workers}
           dir('ansible') {
             sh '''
               ansible-playbook -i inventory.ini common-modules.yml
-              ansible-playbook -i inventory.ini master.yml
+              ansible-playbook -i inventory.ini master.yml \
+                -e cluster_name=kubeadm-cluster \
+                -e region=ap-south-1 \
+                -e vpc_id=${VPC_ID}
               ansible-playbook -i inventory.ini worker.yml
             '''
           }
@@ -179,8 +187,8 @@ ${workers}
             sh """
               ansible-playbook -i inventory.ini deploy-app.yml \
                 -e IMAGE_NAME=${IMAGE_NAME} \
-                -e IMAGE_TAG=${IMAGE_TAG} \
-                -e ADMIN_IP_CIDR=${params.ADMIN_IP_CIDR}
+                -e IMAGE_TAG=${IMAGE_TAG} 
+               
             """
           }
         }

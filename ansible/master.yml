@@ -48,8 +48,7 @@
     # Wait for kube-apiserver health (LOW LEVEL CHECK)
     # --------------------------------------------------
     - name: Wait for kube-apiserver to be healthy
-      shell: |
-        curl -k https://127.0.0.1:6443/healthz
+      shell: curl -k https://127.0.0.1:6443/healthz
       register: api_health
       retries: 20
       delay: 15
@@ -78,6 +77,36 @@
     - name: Install Helm
       shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
       when: not helm_bin.stat.exists
+
+    # ==================================================
+    # 🔹 NEW TASKS – AWS LOAD BALANCER CONTROLLER SETUP
+    # ==================================================
+
+    - name: Add EKS Helm repo
+      become_user: ubuntu
+      shell: |
+        helm repo add eks https://aws.github.io/eks-charts
+        helm repo update
+
+    - name: Install cert-manager
+      become_user: ubuntu
+      shell: |
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+
+    - name: Wait for cert-manager pods to be ready
+      become_user: ubuntu
+      shell: |
+        kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
+
+    - name: Install AWS Load Balancer Controller
+      become_user: ubuntu
+      shell: |
+        helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+          -n kube-system \
+          --set clusterName={{ cluster_name }} \
+          --set region={{ region }} \
+          --set vpcId={{ vpc_id }} \
+          --set serviceAccount.create=true
 
     # --------------------------------------------------
     # Install Flannel CNI (ONLY ONCE)
@@ -122,6 +151,10 @@
       become_user: ubuntu
       shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
       when: ingress_ns.rc != 0
+
+    - name: Scale ingress controller
+      become_user: ubuntu
+      shell: kubectl scale deploy ingress-nginx-controller -n ingress-nginx --replicas=2
 
     # --------------------------------------------------
     # Generate join command (SAFE & REUSABLE)
