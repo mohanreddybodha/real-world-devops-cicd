@@ -5,7 +5,6 @@ provider "aws" {
   region = var.region
 }
 
-
 terraform {
   backend "s3" {
     bucket = "terraform-state-jenkins-191"
@@ -14,6 +13,48 @@ terraform {
   }
 }
 
+########################################
+# IAM (For Kubernetes LoadBalancer)
+########################################
+resource "aws_iam_role" "k8s_worker_role" {
+  name = "k8s-worker-lb-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_policy" "k8s_lb_policy" {
+  name = "k8s-lb-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ec2:*",
+        "elasticloadbalancing:*",
+        "iam:PassRole"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_lb_policy" {
+  role       = aws_iam_role.k8s_worker_role.name
+  policy_arn = aws_iam_policy.k8s_lb_policy.arn
+}
+
+resource "aws_iam_instance_profile" "k8s_worker_profile" {
+  name = "k8s-worker-profile"
+  role = aws_iam_role.k8s_worker_role.name
+}
 
 ########################################
 # Security Group
@@ -76,10 +117,10 @@ resource "aws_security_group" "k8s_sg" {
 # Master Node
 #######################################
 resource "aws_instance" "master" {
-  ami                         = var.ami
-  instance_type               = "t2.medium"
-  key_name                    = var.key_name
-  vpc_security_group_ids      = [aws_security_group.k8s_sg.id]
+  ami                    = var.ami
+  instance_type          = "t2.medium"
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.k8s_sg.id]
 
   user_data = <<-EOF
     #!/bin/bash
@@ -115,11 +156,13 @@ resource "aws_eip_association" "master_assoc" {
 # Worker Nodes
 ########################################
 resource "aws_instance" "worker" {
-  count                       = var.worker_count
-  ami                         = var.ami
-  instance_type               = "t2.medium"
-  key_name                    = var.key_name
-  vpc_security_group_ids      = [aws_security_group.k8s_sg.id]
+  count                  = var.worker_count
+  ami                    = var.ami
+  instance_type          = "t2.medium"
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.k8s_sg.id]
+
+  iam_instance_profile = aws_iam_instance_profile.k8s_worker_profile.name
 
   user_data = <<-EOF
     #!/bin/bash
@@ -139,7 +182,7 @@ resource "aws_instance" "worker" {
 # Elastic IPs for Workers
 ########################################
 resource "aws_eip" "worker_eip" {
-  count = var.worker_count
+  count  = var.worker_count
   domain = "vpc"
 
   tags = {

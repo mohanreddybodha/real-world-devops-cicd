@@ -70,3 +70,7 @@
     - name: Apply application ingress
       become_user: ubuntu
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-ingress.yaml
+
+    - name: Force ingress-nginx Service to LoadBalancer (permanent)
+      become_user: ubuntu
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/ingress-nginx-lb.yaml
