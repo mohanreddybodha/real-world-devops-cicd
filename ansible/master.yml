@@ -113,6 +113,19 @@
           --set serviceAccount.create=true \
           --set serviceAccount.create=aws-load-balancer-controller
 
+    - name: Wait for AWS Load Balancer Controller deployment
+      become_user: ubuntu
+      shell: |
+        kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=300s
+
+    - name: Wait for AWS LB webhook service endpoints
+      become_user: ubuntu
+      shell: |
+        kubectl wait --for=condition=Ready pod \
+          -l app.kubernetes.io/name=aws-load-balancer-controller \
+          -n kube-system \
+          --timeout=300s
+
     # --------------------------------------------------
     # Install Flannel CNI (ONLY ONCE)
     # --------------------------------------------------
