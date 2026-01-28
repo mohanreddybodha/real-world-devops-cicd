@@ -39,7 +39,8 @@ resource "aws_iam_policy" "k8s_lb_policy" {
       Action = [
         "ec2:*",
         "elasticloadbalancing:*",
-        "iam:PassRole"
+        "iam:PassRole",
+        "iam:CreateServiceLinkedRole"
       ]
       Resource = "*"
     }]
