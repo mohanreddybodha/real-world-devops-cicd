@@ -38,29 +38,6 @@
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/app1-service.yaml
 
     # --------------------------------------------------
-    # Wait for ingress-nginx admission webhook (CRITICAL)
-    # --------------------------------------------------
-    - name: Wait for ingress-nginx admission endpoint to be ready
-      become_user: ubuntu
-      shell: |
-        kubectl get endpoints ingress-nginx-controller-admission \
-          -n ingress-nginx \
-          -o jsonpath='{.subsets[*].addresses[*].ip}'
-      register: admission_ep
-      retries: 20
-      delay: 15
-      until: admission_ep.stdout != ""
-      changed_when: false
-
-    # --------------------------------------------------
-    # CLEANUP: Remove conflicting ingress from default namespace
-    # --------------------------------------------------
-    - name: Clean up conflicting Ingress in default namespace
-      become_user: ubuntu
-      shell: kubectl delete ingress monitoring-ingress -n default --ignore-not-found=true
-      # --ignore-not-found=true ensures idempotency if the ingress is already deleted
-
-    # --------------------------------------------------
     # Apply ingress LAST (NO WEBHOOK FAILURES)
     # --------------------------------------------------
     - name: Apply monitoring ingress
@@ -70,7 +47,3 @@
     - name: Apply application ingress
       become_user: ubuntu
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-ingress.yaml
-
-    - name: Force ingress-nginx Service to LoadBalancer (permanent)
-      become_user: ubuntu
-      shell: kubectl apply -f /home/ubuntu/k8s-manifests/ingress-lb.yaml

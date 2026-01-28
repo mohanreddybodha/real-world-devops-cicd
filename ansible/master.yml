@@ -2,6 +2,11 @@
   become: yes
   gather_facts: yes
 
+  var:
+     - hosts: master
+  become: yes
+  gather_facts: yes
+
   tasks:
 
     # --------------------------------------------------
@@ -79,7 +84,7 @@
       when: not helm_bin.stat.exists
 
     # ==================================================
-    # 🔹 NEW TASKS – AWS LOAD BALANCER CONTROLLER SETUP
+    # AWS LOAD BALANCER CONTROLLER SETUP
     # ==================================================
 
     - name: Add EKS Helm repo
@@ -107,6 +112,7 @@
           --set region={{ region }} \
           --set vpcId={{ vpc_id }} \
           --set serviceAccount.create=true
+          --set serviceAccount.create=aws-load-balancer-controller
 
     # --------------------------------------------------
     # Install Flannel CNI (ONLY ONCE)
@@ -133,28 +139,6 @@
       register: node_ready
       until: node_ready.rc == 0
       changed_when: false
-
-    # --------------------------------------------------
-    # Check if ingress-nginx namespace exists
-    # --------------------------------------------------
-    - name: Check if ingress-nginx namespace exists
-      become_user: ubuntu
-      command: kubectl get ns ingress-nginx
-      register: ingress_ns
-      failed_when: false
-      changed_when: false
-
-    # --------------------------------------------------
-    # Install NGINX Ingress Controller (ONLY ONCE)
-    # --------------------------------------------------
-    - name: Install NGINX Ingress Controller
-      become_user: ubuntu
-      shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-      when: ingress_ns.rc != 0
-
-    - name: Scale ingress controller
-      become_user: ubuntu
-      shell: kubectl scale deploy ingress-nginx-controller -n ingress-nginx --replicas=2
 
     # --------------------------------------------------
     # Generate join command (SAFE & REUSABLE)
