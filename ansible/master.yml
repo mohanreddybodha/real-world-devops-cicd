@@ -124,11 +124,11 @@
           -n kube-system \
           --timeout=300s
 
-     - name: Verify AWS LB webhook CA bundle is injected
-       become_user: ubuntu
-       shell: |
-         kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
-         -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
+    - name: Verify AWS LB webhook CA bundle is injected
+      become_user: ubuntu
+      shell: |
+        kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
+        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
 
     # --------------------------------------------------
     # Install Flannel CNI (ONLY ONCE)
