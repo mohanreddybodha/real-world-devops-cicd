@@ -46,3 +46,12 @@
     become_user: ubuntu
     shell: |
       kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=5m
+
+  - name: Wait for AWS LB webhook CA bundle injection
+    shell: |
+      until kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
+        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | grep -q .; do
+        echo "Waiting for AWS LB webhook CA bundle..."
+        sleep 10
+      done
+    changed_when: false
