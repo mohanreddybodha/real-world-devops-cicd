@@ -2,176 +2,171 @@
   become: yes
   gather_facts: yes
 
+  vars:
+    kubeconfig: /etc/kubernetes/admin.conf
+
   tasks:
 
-    # --------------------------------------------------
-    # Check if cluster already initialized
-    # --------------------------------------------------
-    - name: Check if kube-apiserver manifest exists
-      stat:
-        path: /etc/kubernetes/manifests/kube-apiserver.yaml
-      register: apiserver_manifest
+  # ==================================================
+  # 0. WAIT FOR CLOUD-INIT (CRITICAL)
+  # ==================================================
+  - name: Wait for cloud-init to finish
+    shell: cloud-init status --wait
+    changed_when: false
 
-    # --------------------------------------------------
-    # Initialize Kubernetes cluster (ONLY ONCE)
-    # --------------------------------------------------
-    - name: Initialize Kubernetes cluster
-      command: kubeadm init --pod-network-cidr=10.244.0.0/16
-      when: not apiserver_manifest.stat.exists
-      register: kubeadm_init
-      changed_when: kubeadm_init.rc == 0
+  # ==================================================
+  # 1. CHECK IF CLUSTER IS ALREADY INITIALIZED
+  # ==================================================
+  - name: Check if kube-apiserver manifest exists
+    stat:
+      path: /etc/kubernetes/manifests/kube-apiserver.yaml
+    register: apiserver_manifest
 
-    # --------------------------------------------------
-    # Ensure kubeconfig directory
-    # --------------------------------------------------
-    - name: Ensure kubeconfig directory exists
-      file:
-        path: /home/ubuntu/.kube
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
+  # ==================================================
+  # 2. INITIALIZE KUBERNETES (ONLY ONCE)
+  # ==================================================
+  - name: Initialize Kubernetes cluster
+    command: kubeadm init --pod-network-cidr=10.244.0.0/16
+    when: not apiserver_manifest.stat.exists
+    register: kubeadm_init
+    changed_when: kubeadm_init.rc == 0
 
-    # --------------------------------------------------
-    # Copy admin kubeconfig
-    # --------------------------------------------------
-    - name: Copy admin kubeconfig
-      copy:
-        src: /etc/kubernetes/admin.conf
-        dest: /home/ubuntu/.kube/config
-        owner: ubuntu
-        group: ubuntu
-        mode: '0644'
-        remote_src: yes
+  # ==================================================
+  # 3. CONFIGURE KUBECTL FOR UBUNTU USER
+  # ==================================================
+  - name: Ensure kubeconfig directory exists
+    file:
+      path: /home/ubuntu/.kube
+      state: directory
+      owner: ubuntu
+      group: ubuntu
+      mode: '0755'
 
-    # --------------------------------------------------
-    # Wait for kube-apiserver health (LOW LEVEL CHECK)
-    # --------------------------------------------------
-    - name: Wait for kube-apiserver to be healthy
-      shell: curl -k https://127.0.0.1:6443/healthz
-      register: api_health
-      retries: 20
-      delay: 15
-      until: api_health.stdout == "ok"
+  - name: Copy admin kubeconfig
+    copy:
+      src: /etc/kubernetes/admin.conf
+      dest: /home/ubuntu/.kube/config
+      owner: ubuntu
+      group: ubuntu
+      mode: '0644'
+      remote_src: yes
 
-    # --------------------------------------------------
-    # Verify kubectl access (SAFE CHECK)
-    # --------------------------------------------------
-    - name: Verify kubectl access
-      shell: kubectl get nodes
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: kubectl_check
-      retries: 10
-      delay: 10
-      until: kubectl_check.rc == 0
+  # ==================================================
+  # 4. WAIT FOR API SERVER
+  # ==================================================
+  - name: Wait for kube-apiserver to be healthy
+    shell: curl -k https://127.0.0.1:6443/healthz
+    register: api_health
+    retries: 20
+    delay: 15
+    until: api_health.stdout == "ok"
 
-    # --------------------------------------------------
-    # Install Helm (idempotent)
-    # --------------------------------------------------
-    - name: Check if Helm is installed
-      stat:
-        path: /usr/local/bin/helm
-      register: helm_bin
+  - name: Verify kubectl access
+    shell: kubectl get nodes
+    environment:
+      KUBECONFIG: "{{ kubeconfig }}"
+    retries: 10
+    delay: 10
+    register: kubectl_check
+    until: kubectl_check.rc == 0
 
-    - name: Install Helm
-      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-      when: not helm_bin.stat.exists
+  # ==================================================
+  # 5. INSTALL CNI (FLANNEL) — MUST BE EARLY
+  # ==================================================
+  - name: Check if Flannel is already installed
+    stat:
+      path: /etc/cni/net.d/10-flannel.conflist
+    register: flannel_conf
 
-    # ==================================================
-    # AWS LOAD BALANCER CONTROLLER SETUP
-    # ==================================================
+  - name: Install Flannel CNI
+    command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+    environment:
+      KUBECONFIG: "{{ kubeconfig }}"
+    when: not flannel_conf.stat.exists
 
-    - name: Add EKS Helm repo
-      become_user: ubuntu
-      shell: |
-        helm repo add eks https://aws.github.io/eks-charts
-        helm repo update
+  # ==================================================
+  # 6. WAIT FOR NODE & COREDNS
+  # ==================================================
+  - name: Wait for all nodes to be Ready
+    shell: kubectl wait --for=condition=Ready node --all --timeout=5m
+    environment:
+      KUBECONFIG: "{{ kubeconfig }}"
+    changed_when: false
 
-    - name: Install cert-manager
-      become_user: ubuntu
-      shell: |
-        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+  - name: Wait for CoreDNS to be Available
+    shell: kubectl wait --for=condition=Available deployment/coredns -n kube-system --timeout=5m
+    environment:
+      KUBECONFIG: "{{ kubeconfig }}"
+    changed_when: false
 
-    - name: Wait for cert-manager deployments
-      become_user: ubuntu
-      shell: |
-        kubectl rollout status deployment/cert-manager -n cert-manager --timeout=300s
-        kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=300s
-        kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=300s
+  # ==================================================
+  # 7. INSTALL HELM
+  # ==================================================
+  - name: Check if Helm is installed
+    stat:
+      path: /usr/local/bin/helm
+    register: helm_bin
 
-    - name: Install AWS Load Balancer Controller
-      become_user: ubuntu
-      shell: |
-        helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
-          -n kube-system \
-          --set clusterName={{ cluster_name }} \
-          --set region={{ region }} \
-          --set vpcId={{ vpc_id }} \
-          --set serviceAccount.create=true \
-          --set serviceAccount.create=aws-load-balancer-controller
+  - name: Install Helm
+    shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    when: not helm_bin.stat.exists
 
-    - name: Wait for AWS Load Balancer Controller deployment
-      become_user: ubuntu
-      shell: |
-        kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=300s
+  # ==================================================
+  # 8. CERT-MANAGER (AFTER DNS & CNI)
+  # ==================================================
+  - name: Install cert-manager
+    become_user: ubuntu
+    shell: |
+      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
 
-    - name: Wait for AWS LB webhook service endpoints
-      become_user: ubuntu
-      shell: |
-        kubectl wait --for=condition=Ready pod \
-          -l app.kubernetes.io/name=aws-load-balancer-controller \
-          -n kube-system \
-          --timeout=300s
+  - name: Wait for cert-manager deployments
+    become_user: ubuntu
+    shell: |
+      kubectl rollout status deployment/cert-manager -n cert-manager --timeout=5m
+      kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=5m
+      kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=5m
 
-    - name: Verify AWS LB webhook CA bundle is injected
-      become_user: ubuntu
-      shell: |
-        kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
-        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
+  # ==================================================
+  # 9. AWS LOAD BALANCER CONTROLLER
+  # ==================================================
+  - name: Add EKS Helm repo
+    become_user: ubuntu
+    shell: |
+      helm repo add eks https://aws.github.io/eks-charts
+      helm repo update
 
-    # --------------------------------------------------
-    # Install Flannel CNI (ONLY ONCE)
-    # --------------------------------------------------
-    - name: Check if Flannel is already installed
-      stat:
-        path: /etc/cni/net.d/10-flannel.conflist
-      register: flannel_conf
+  - name: Install AWS Load Balancer Controller
+    become_user: ubuntu
+    shell: |
+      helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+        -n kube-system \
+        --set clusterName={{ cluster_name }} \
+        --set region={{ region }} \
+        --set vpcId={{ vpc_id }} \
+        --set serviceAccount.create=true \
+        --set serviceAccount.name=aws-load-balancer-controller
 
-    - name: Install Flannel CNI
-      command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      when: not flannel_conf.stat.exists
+  - name: Wait for AWS Load Balancer Controller
+    become_user: ubuntu
+    shell: |
+      kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=5m
 
-    # --------------------------------------------------
-    # Wait for node to become Ready (CNI required)
-    # --------------------------------------------------
-    - name: Wait for master node to be Ready
-      become_user: ubuntu
-      shell: kubectl get nodes --no-headers | grep -v NotReady
-      retries: 20
-      delay: 15
-      register: node_ready
-      until: node_ready.rc == 0
-      changed_when: false
+  # ==================================================
+  # 10. GENERATE JOIN COMMAND (SAFE)
+  # ==================================================
+  - name: Check if join command already exists
+    stat:
+      path: /tmp/kubeadm_join.sh
+    register: join_script
 
-    # --------------------------------------------------
-    # Generate join command (SAFE & REUSABLE)
-    # --------------------------------------------------
-    - name: Check if join command already exists
-      stat:
-        path: /tmp/kubeadm_join.sh
-      register: join_script
+  - name: Generate join command
+    command: kubeadm token create --print-join-command
+    register: join_cmd
+    when: not join_script.stat.exists
 
-    - name: Generate join command
-      command: kubeadm token create --print-join-command
-      register: join_cmd
-      when: not join_script.stat.exists
-
-    - name: Save join command
-      copy:
-        content: "{{ join_cmd.stdout }}"
-        dest: /tmp/kubeadm_join.sh
-        mode: '0755'
-      when: not join_script.stat.exists
+  - name: Save join command
+    copy:
+      content: "{{ join_cmd.stdout }}"
+      dest: /tmp/kubeadm_join.sh
+      mode: '0755'
+    when: not join_script.stat.exists
