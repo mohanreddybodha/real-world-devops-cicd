@@ -15,7 +15,7 @@
     - name: Render Deployment template
       template:
         src: ../k8s-manifests/app-deployment.yaml.j2
-        dest: /home/ubuntu/k8s-manifests/app1-deployment.yaml
+        dest: /home/ubuntu/k8s-manifests/app-deployment.yaml
         owner: ubuntu
         group: ubuntu
 
