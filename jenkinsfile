@@ -130,12 +130,12 @@ ${workers}
           dir('ansible') {
             sh """
               ansible-playbook -i inventory.ini common-modules.yaml
-              ansible-playbook -i inventory.ini master.yaml \
+              ansible-playbook -i inventory.ini master.yaml 
+              ansible-playbook -i inventory.ini worker.yaml 
+              ansible-playbook -i inventory.ini master2.yaml \
                 -e cluster_name=kubeadm-cluster \
                 -e region=ap-south-1 \
                 -e vpc_id=${params.VPC_ID}
-              ansible-playbook -i inventory.ini worker.yaml 
-              ansible-playbook -i inventory.ini master2.yaml 
             """
           }
         }
