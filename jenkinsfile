@@ -181,7 +181,7 @@ ${workers}
         sshagent(credentials: [SSH_CREDS]) {
           dir('ansible') {
             sh """
-              ansible-playbook -i inventory.ini deploy-app.yml \
+              ansible-playbook -i inventory.ini deploy-app.yaml \
                 -e IMAGE_NAME=${IMAGE_NAME} \
                 -e IMAGE_TAG=${IMAGE_TAG} 
                
