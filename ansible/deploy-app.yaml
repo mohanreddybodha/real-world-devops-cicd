@@ -22,13 +22,15 @@
     # --------------------------------------------------
     # Apply NON-INGRESS resources first (SAFE)
     # --------------------------------------------------
-    - name: Apply application deployment
-      become_user: ubuntu
-      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-deployment.yaml
 
     - name: Apply application service
       become_user: ubuntu
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-service.yaml
+
+    - name: Apply application deployment
+      become_user: ubuntu
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-deployment.yaml
+
 
     - name: Apply application ingress
       become_user: ubuntu
