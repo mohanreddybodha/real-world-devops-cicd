@@ -19,13 +19,6 @@
         owner: ubuntu
         group: ubuntu
 
-    - name: Render monitoring ingress
-      template:
-        src: ../k8s-manifests/monitoring-ingress.yaml.j2
-        dest: /home/ubuntu/k8s-manifests/monitoring-ingress.yaml
-        owner: ubuntu
-        group: ubuntu
-
     # --------------------------------------------------
     # Apply NON-INGRESS resources first (SAFE)
     # --------------------------------------------------
