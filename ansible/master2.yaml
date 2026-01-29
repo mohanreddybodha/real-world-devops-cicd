@@ -49,7 +49,7 @@
         -n kube-system --timeout=5m
 
   # ==================================================
-  # WAIT FOR WEBHOOK CA BUNDLE (CORRECT WAY)
+  # WAIT FOR WEBHOOK CA BUNDLE (CERT-MANAGER INJECTION)
   # ==================================================
   - name: Wait for AWS LB webhook CA bundle injection
     become_user: ubuntu
@@ -66,3 +66,21 @@
   - name: Debug CA bundle size
     debug:
       msg: "AWS LB webhook CA bundle size: {{ ca_bundle.stdout }}"
+
+  # ========================
+  # HARD TLS READINESS CHECK 
+  # ========================
+  - name: Wait for AWS LB webhook to be reachable (TLS ready)
+    become_user: ubuntu
+    shell: |
+      kubectl run tmp-webhook-test \
+        --rm -i --restart=Never \
+        --image=curlimages/curl:8.5.0 \
+        -- \
+        curl -sk https://aws-load-balancer-webhook-service.kube-system.svc:443/healthz
+    register: webhook_test
+    retries: 30
+    delay: 10
+    until: webhook_test.rc == 0
+    failed_when: false
+    changed_when: false
