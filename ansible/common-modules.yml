@@ -4,6 +4,10 @@
 
   tasks:
 
+    - name: wait for cloud-init to finish
+      shell: cloud-init status --wait
+      changed_when: false
+9
     # ==================================================
     # System prerequisites
     # ==================================================
