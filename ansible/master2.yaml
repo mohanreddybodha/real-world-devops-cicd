@@ -50,8 +50,10 @@
   - name: Wait for AWS LB webhook CA bundle injection
     shell: |
       until kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
-        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | grep -q .; do
-        echo "Waiting for AWS LB webhook CA bundle..."
-        sleep 10
-      done
+        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
+    register: ca_bundle
+    retries: 30
+    delay: 10
+    until: ca_bundil.stdout | int > 100
+    failed_when: false
     changed_when: false
