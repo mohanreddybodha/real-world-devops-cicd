@@ -14,7 +14,7 @@
 
     - name: Render Deployment template
       template:
-        src: ../k8s-manifests/app1-deployment.yaml.j2
+        src: ../k8s-manifests/app-deployment.yaml.j2
         dest: /home/ubuntu/k8s-manifests/app1-deployment.yaml
         owner: ubuntu
         group: ubuntu
@@ -31,18 +31,11 @@
     # --------------------------------------------------
     - name: Apply application deployment
       become_user: ubuntu
-      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app1-deployment.yaml
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-deployment.yaml
 
     - name: Apply application service
       become_user: ubuntu
-      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app1-service.yaml
-
-    # --------------------------------------------------
-    # Apply ingress LAST (NO WEBHOOK FAILURES)
-    # --------------------------------------------------
-    - name: Apply monitoring ingress
-      become_user: ubuntu
-      shell: kubectl apply -f /home/ubuntu/k8s-manifests/monitoring-ingress.yaml
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-service.yaml
 
     - name: Apply application ingress
       become_user: ubuntu

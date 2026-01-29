@@ -2,19 +2,58 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app-ingress
-  namespace: default
+  namespace: app
   annotations:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+
+    # IMPORTANT: health check
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/success-codes: "200,302"
+
+    # Protect monitoring paths
+    alb.ingress.kubernetes.io/auth-type: basic
+    alb.ingress.kubernetes.io/auth-secret: monitoring-basic-auth
+    alb.ingress.kubernetes.io/auth-scope: /grafana,/prometheus,/alertmanager
+
 spec:
   rules:
     - http:
         paths:
-          - path: /
+          # 🔹 Application (public)
+          - path: /feedback
             pathType: Prefix
             backend:
               service:
                 name: app1-service
                 port:
                   number: 80
+
+          # Grafana
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 80
+
+          # Prometheus
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-kube-prometheus-prometheus
+                port:
+                  number: 9090
+
+          # Alertmanager
+          - path: /alertmanager
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-kube-prometheus-alertmanager
+                port:
+                  number: 9093
