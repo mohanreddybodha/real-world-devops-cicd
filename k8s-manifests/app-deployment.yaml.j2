@@ -1,19 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app1
+  name: app
+  namespace: app
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: app1
+      app: app
   template:
     metadata:
       labels:
-        app: app1
+        app: app
     spec:
       containers:
-        - name: app1
+        - name: app
           image: {{ IMAGE_NAME }}:{{ IMAGE_TAG }}
           ports:
             - containerPort: 5000
