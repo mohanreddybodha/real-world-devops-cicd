@@ -5,7 +5,7 @@ metadata:
   namespace: app
 spec:
   selector:
-    app: app
+    app: app-deploy
   ports:
     - port: 80
       targetPort: 5000

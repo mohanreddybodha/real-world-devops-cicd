@@ -4,7 +4,6 @@ metadata:
   name: monitoring-ingress
   namespace: monitoring
   annotations:
-    kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/group.name: main-alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
@@ -15,6 +14,7 @@ metadata:
     alb.ingress.kubernetes.io/auth-secret: monitoring-basic-auth
 
 spec:
+  ingressClassName: alb
   rules:
   - http:
       paths:

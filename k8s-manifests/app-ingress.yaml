@@ -17,6 +17,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: app1-service
+            name: app-service
             port:
               number: 80
