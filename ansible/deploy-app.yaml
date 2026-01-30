@@ -27,7 +27,6 @@
       become_user: ubuntu
       shell: kubectl create namespace app --dry-run=client -o yaml | kubectl apply -f -
 
-
     - name: Apply application service
       become_user: ubuntu
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-service.yaml
@@ -35,6 +34,10 @@
     - name: Apply application deployment
       become_user: ubuntu
       shell: kubectl apply -f /home/ubuntu/k8s-manifests/app-deployment.yaml
+
+    - name: Apply monitoring ingress
+      become_user: ubuntu
+      shell: kubectl apply -f /home/ubuntu/k8s-manifests/monitoring-ingress.yaml
 
     - name: Apply application ingress
       become_user: ubuntu
