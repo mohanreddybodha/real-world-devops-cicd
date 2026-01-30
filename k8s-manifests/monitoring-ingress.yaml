@@ -9,10 +9,6 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
 
-    # Basic auth for monitoring
-    alb.ingress.kubernetes.io/auth-type: basic
-    alb.ingress.kubernetes.io/auth-secret: monitoring-basic-auth
-
 spec:
   ingressClassName: alb
   rules:
