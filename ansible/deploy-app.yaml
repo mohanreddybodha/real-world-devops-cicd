@@ -19,6 +19,15 @@
         owner: ubuntu
         group: ubuntu
 
+    - name: Pre-clean Kubernetes resources (safe)
+      become_user: ubuntu
+      shell: |
+        kubectl delete ingress app-ingress -n app --ignore-not-found
+        kubectl delete ingress monitoring-ingress -n monitoring --ignore-not-found
+        kubectl delete service app-service -n app --ignore-not-found
+        kubectl delete deployment app-deploy -n app --ignore-not-found
+      changed_when: false
+
     # --------------------------------------------------
     # Apply NON-INGRESS resources first (SAFE)
     # --------------------------------------------------
