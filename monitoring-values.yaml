@@ -1,7 +1,5 @@
 grafana:
   service:
-    port: 3000
-    targetPort: 3000
     type: NodePort
     nodePort: 30081
   grafana.ini:
