@@ -9,6 +9,9 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
 
+    alb.ingress.kubernetes.io/healthcheck-path: /grafana/login
+    alb.ingress.kubernetes.io/success-codes: "200,302"
+
 spec:
   ingressClassName: alb
   rules:
