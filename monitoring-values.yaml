@@ -1,7 +1,9 @@
 grafana:
   service:
+    port: 3000
+    targetPort: 3000
     type: NodePort
-    nodeport: 30081
+    nodePort: 30081
   grafana.ini:
     server:
       root_url: "%(protocol)s://%(domain)s/grafana/"
@@ -10,7 +12,7 @@ grafana:
 prometheus:
   service:
     type: NodePort
-    nodeport: 30082
+    nodePort: 30082
   prometheusSpec:
     routePrefix: /prometheus
     externalUrl: "/prometheus/"
@@ -18,7 +20,7 @@ prometheus:
 alertmanager:
   service:
     type: NodePort
-    nodeport: 30083
+    nodePort: 30083
   alertmanagerSpec:
     routePrefix: /alertmanager
 
