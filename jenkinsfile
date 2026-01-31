@@ -175,7 +175,7 @@ ${workers}
                   -n monitoring \
                   --create-namespace \
                   -f /tmp/monitoring-values.yaml \
-                  --set alertmanager.alertmanagerSpec.externalUrl=http://${ALB_DNS}/alertmanager
+                  --set alertmanager.alertmanagerSpec.externalUrl=http://${ALB_DNS}/alertmanager \
                   --timeout 15m \
                   --wait
               '
