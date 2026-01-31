@@ -74,13 +74,4 @@
         systemctl daemon-reload
         systemctl restart kubelet
 
-    # --------------------------------------------------
-    # Wait for worker node to be Ready
-    # --------------------------------------------------
-    - name: Wait for worker node Ready
-      shell: kubectl get nodes | grep -v NotReady
-      retries: 20
-      delay: 15
-      register: node_ready
-      until: node_ready.rc == 0
-      changed_when: false
+   
