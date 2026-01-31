@@ -1,15 +1,24 @@
 grafana:
+  service:
+    type: NodePort
+    nodeport: 30081
   grafana.ini:
     server:
       root_url: "%(protocol)s://%(domain)s/grafana/"
       serve_from_sub_path: true
 
 prometheus:
+  service:
+    type: NodePort
+    nodeport: 30082
   prometheusSpec:
     routePrefix: /prometheus
     externalUrl: "/prometheus/"
 
 alertmanager:
+  service:
+    type: NodePort
+    nodeport: 30083
   alertmanagerSpec:
     routePrefix: /alertmanager
     externalUrl: "/alertmanager/"
