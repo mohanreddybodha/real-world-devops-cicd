@@ -21,7 +21,6 @@ alertmanager:
     nodeport: 30083
   alertmanagerSpec:
     routePrefix: /alertmanager
-    externalUrl: "/alertmanager/"
 
   config:
     global:

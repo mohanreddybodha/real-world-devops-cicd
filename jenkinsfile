@@ -34,6 +34,16 @@ pipeline {
       }
     }
 
+    stage('Validate Parameters') {
+      steps {
+        script {
+          if (!env.ALB_DNS?.trim()) {
+            error "ALB_DNS parameter is required"
+          }
+        }
+      }
+    }
+
     stage('Install Dependencies') {
       parallel {
         stage('Backend Deps') {
@@ -165,6 +175,7 @@ ${workers}
                   -n monitoring \
                   --create-namespace \
                   -f /tmp/monitoring-values.yaml \
+                  --set alertmanager.alertmanagerSpec.externalUrl=http://${ALB_DNS}/alertmanager
                   --timeout 15m \
                   --wait
               '
