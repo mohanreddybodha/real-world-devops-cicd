@@ -4,11 +4,12 @@ metadata:
   name: app-service
   namespace: app
 spec:
+  type: NodePort
   selector:
     app: app-deploy
   ports:
     - port: 80
       targetPort: 5000
       nodeport: 30080
-  type: NodePort
+ 
    
