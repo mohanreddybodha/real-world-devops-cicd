@@ -8,12 +8,42 @@
   tasks:
 
   # ==================================================
-  # CERT-MANAGER
+  # CLUSTER GUARD (FAIL FAST)
   # ==================================================
-  - name: Install cert-manager
+  - name: Verify Kubernetes API is reachable
+    become_user: ubuntu
+    shell: kubectl get nodes
+    register: k8s_health
+    retries: 10
+    delay: 10
+    until: k8s_health.rc == 0
+    changed_when: false
+
+  # ==================================================
+  # CERT-MANAGER (GUARDED)
+  # ==================================================
+
+  - name: Check if cert-manager namespace exists
+    become_user: ubuntu
+    shell: kubectl get ns cert-manager
+    register: cert_ns
+    failed_when: false
+    changed_when: false
+
+  - name: Install cert-manager (only if missing)
     become_user: ubuntu
     shell: |
       kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+    when: cert_ns.rc != 0
+
+  - name: Check if cert-manager controller is already ready
+    become_user: ubuntu
+    shell: |
+      kubectl get deployment cert-manager -n cert-manager \
+      -o jsonpath='{.status.readyReplicas}'
+    register: cert_ready
+    failed_when: false
+    changed_when: false
 
   - name: Wait for cert-manager deployments
     become_user: ubuntu
@@ -21,15 +51,36 @@
       kubectl rollout status deployment/cert-manager -n cert-manager --timeout=5m
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=5m
       kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=5m
+    when: cert_ready.stdout | int < 1
 
   # ==================================================
-  # AWS LOAD BALANCER CONTROLLER
+  # HELM REPO (GUARDED)
   # ==================================================
+
+  - name: Check if EKS Helm repo exists
+    become_user: ubuntu
+    shell: helm repo list | grep eks
+    register: eks_repo
+    failed_when: false
+    changed_when: false
+
   - name: Add EKS Helm repo
     become_user: ubuntu
     shell: |
       helm repo add eks https://aws.github.io/eks-charts
       helm repo update
+    when: eks_repo.rc != 0
+
+  # ==================================================
+  # AWS LOAD BALANCER CONTROLLER (GUARDED)
+  # ==================================================
+
+  - name: Check AWS Load Balancer Controller deployment
+    become_user: ubuntu
+    shell: kubectl get deployment aws-load-balancer-controller -n kube-system
+    register: alb_dep
+    failed_when: false
+    changed_when: false
 
   - name: Install AWS Load Balancer Controller
     become_user: ubuntu
@@ -41,6 +92,7 @@
         --set vpcId={{ vpc_id }} \
         --set serviceAccount.create=true \
         --set serviceAccount.name=aws-load-balancer-controller
+    when: alb_dep.rc != 0
 
   - name: Wait for AWS Load Balancer Controller deployment
     become_user: ubuntu
@@ -49,28 +101,39 @@
         -n kube-system --timeout=5m
 
   # ==================================================
-  # WAIT FOR WEBHOOK CA BUNDLE (CERT-MANAGER INJECTION)
+  # WEBHOOK CERT + TLS (STRONG GUARDS)
   # ==================================================
+
+  - name: Check webhook CA bundle size
+    become_user: ubuntu
+    shell: |
+      kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
+      -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
+    register: ca_bundle
+    failed_when: false
+    changed_when: false
+
   - name: Wait for AWS LB webhook CA bundle injection
     become_user: ubuntu
     shell: |
       kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
         -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
-    register: ca_bundle
+    register: ca_bundle_wait
     retries: 30
     delay: 10
-    until: ca_bundle.stdout | int > 100
+    until: ca_bundle_wait.stdout | int > 100
+    when: ca_bundle.stdout | int < 100
     failed_when: false
     changed_when: false
 
-  - name: Debug CA bundle size
-    debug:
-      msg: "AWS LB webhook CA bundle size: {{ ca_bundle.stdout }}"
+  - name: Check if webhook service exists
+    become_user: ubuntu
+    shell: kubectl get svc aws-load-balancer-webhook-service -n kube-system
+    register: webhook_svc
+    failed_when: false
+    changed_when: false
 
-  # ========================
-  # HARD TLS READINESS CHECK 
-  # ========================
-  - name: Wait for AWS LB webhook to be reachable (TLS ready)
+  - name: Wait for AWS LB webhook TLS endpoint
     become_user: ubuntu
     shell: |
       kubectl run tmp-webhook-test \
@@ -82,5 +145,6 @@
     retries: 30
     delay: 10
     until: webhook_test.rc == 0
+    when: webhook_svc.rc == 0
     failed_when: false
     changed_when: false
