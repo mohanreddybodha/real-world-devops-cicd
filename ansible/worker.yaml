@@ -47,3 +47,40 @@
       delay: 30
       until: join_result.rc == 0
       when: not kubelet_conf.stat.exists
+    # --------------------------------------------------
+    # Wait for cloud-init to finish (CRITICAL)
+    # --------------------------------------------------
+    - name: Wait for cloud-init to finish
+      shell: cloud-init status --wait
+      changed_when: false
+
+    # --------------------------------------------------
+    # Configure kubelet AWS providerID (REQUIRED FOR ALB)
+    # --------------------------------------------------
+    - name: Configure kubelet with AWS providerID
+      shell: |
+        INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+
+        mkdir -p /etc/systemd/system/kubelet.service.d
+
+        cat <<EOF >/etc/systemd/system/kubelet.service.d/20-aws-provider.conf
+        [Service]
+        Environment="KUBELET_EXTRA_ARGS=--cloud-provider=aws --provider-id=aws:///ap-south-1/$INSTANCE_ID"
+        EOF
+
+    - name: Reload and restart kubelet
+      shell: |
+        systemctl daemon-reexec
+        systemctl daemon-reload
+        systemctl restart kubelet
+
+    # --------------------------------------------------
+    # Wait for worker node to be Ready
+    # --------------------------------------------------
+    - name: Wait for worker node Ready
+      shell: kubectl get nodes | grep -v NotReady
+      retries: 20
+      delay: 15
+      register: node_ready
+      until: node_ready.rc == 0
+      changed_when: false
