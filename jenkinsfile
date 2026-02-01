@@ -14,7 +14,6 @@ pipeline {
     IMAGE_TAG    = "v${BUILD_NUMBER}"
     DOCKER_CREDS = "dockerhub-creds"
     SSH_CREDS    = "ec2-ssh-key"
-
     ANSIBLE_HOST_KEY_CHECKING = "False"
   }
 
@@ -152,7 +151,7 @@ ${workers}
       }
     }
 
-    /* -------------------- MONITORING (BEFORE APP) -------------------- */
+    /* -------------------- MONITORING  ------------------------ */
 
     stage('Deploy Monitoring') {
       steps {
