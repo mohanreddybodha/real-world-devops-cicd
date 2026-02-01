@@ -1,13 +1,13 @@
 ---
 
-🚀 End-to-End DevOps CI/CD Project
+## **🚀 End-to-End DevOps CI/CD Project**
 
-Kubernetes · Jenkins · Terraform · Ansible · AWS ALB · Monitoring · Slack Alerts
+**Kubernetes · Jenkins · Terraform · Ansible · AWS ALB · Monitoring · Slack Alerts**
 
 
 ---
 
-📌 Project Overview
+## *📌 Project Overview*
 
 This project demonstrates a real-world DevOps CI/CD pipeline that automates:
 
@@ -29,7 +29,7 @@ The system is built with production best practices, idempotent automation, and c
 
 ---
 
-🧱 High-Level Architecture
+## *🧱 High-Level Architecture*
 
 GitHub
   ↓ (Webhook)
@@ -50,7 +50,7 @@ Slack Alerts (Alertmanager)
 
 ---
 
-☁️ Infrastructure – Terraform
+## *☁️ Infrastructure – Terraform*
 
 AWS Resources Created
 
@@ -97,7 +97,7 @@ Remote state enables safe Terraform re-runs
 
 ---
 
-⚙️ CI/CD Pipeline – Jenkins
+## *⚙️ CI/CD Pipeline – Jenkins*
 
 Jenkins runs inside a Docker container on a t2.medium EC2 instance and is connected to GitHub via webhook.
 
@@ -244,7 +244,7 @@ Prevents random webhook-related pipeline failures
 
 ---
 
-📊 Monitoring Stack (Deployed Before Application)
+## *📊 Monitoring Stack (Deployed Before Application)*
 
 Monitoring is deployed before the application to ensure observability from day one.
 
@@ -272,7 +272,7 @@ Path-based routing via ALB
 
 ---
 
-🔔 Alerting & Slack Integration
+## *🔔 Alerting & Slack Integration*
 
 Alert Flow
 
@@ -305,7 +305,7 @@ Application health check failures
 
 ---
 
-🌐 Traffic Management – AWS ALB
+## *🌐 Traffic Management – AWS ALB*
 
 Ingress Strategy
 
@@ -337,7 +337,7 @@ Stable for self-managed Kubernetes
 
 ---
 
-🧠 Real-World Debugging & Production Issues Faced
+## *🧠 Real-World Debugging & Production Issues Faced*
 
 This project was not a one-click deployment.
 Multiple failures occurred across infrastructure, Kubernetes, ingress, monitoring, and CI/CD orchestration.
@@ -768,7 +768,7 @@ Key Learning
 
 ---
 
-✅ Final Outcome
+## *✅ Final Outcome*
 
 ✔ Fully automated CI/CD pipeline
 ✔ Kubernetes cluster built from scratch
@@ -780,7 +780,7 @@ Key Learning
 
 ---
 
-💼 Resume Highlights
+## *💼 Resume Highlights*
 
 Built end-to-end CI/CD pipeline using Jenkins, Terraform, Ansible, Kubernetes
 
@@ -796,7 +796,7 @@ Solved real Kubernetes networking and ingress challenges
 
 ---
 
-📎 Notes
+## *📎 Notes**
 
 This project reflects real production debugging, not a tutorial setup.
 All architectural decisions were validated through failures, fixes, and re-runs.
@@ -806,7 +806,7 @@ All architectural decisions were validated through failures, fixes, and re-runs.
 
 
 
-## 👨‍💻 About Me
+##  **👨‍💻 About Me**
 
 **Name:** Mohan Reddy Boda
 
@@ -821,9 +821,8 @@ All architectural decisions were validated through failures, fixes, and re-runs.
 
 
 ---
-
-
-##🧭 END OF GUIDE
+## **🧭 END OF GUIDE**
+---
 
 This repository is not a tutorial-style project.
 
