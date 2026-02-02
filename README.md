@@ -22,6 +22,7 @@ The system is built with production best practices, idempotent automation, and c
 
 
 GitHub
+   
   ↓ (Webhook)  
 **Jenkins** (Docker container)  
   ↓  
@@ -298,6 +299,9 @@ This project was not a one-click deployment. Multiple failures occurred across i
 > **"Production systems don’t fail once — they fail in layers. Progress comes from fixing the layer beneath the visible error."**
 
 This project was completed by re-running pipelines until they became fully idempotent and identifying wrong assumptions to correct them properly.
+
+
+
 ---
 
 ##  **👨‍💻 About Me**
@@ -311,6 +315,8 @@ This project was completed by re-running pipelines until they became fully idemp
 **LinkedIn:** [https://www.linkedin.com/in/mohan-reddy-boda-0560722b7/](https://www.linkedin.com/in/mohan-reddy-boda-0560722b7/)
 
 **Email:** [mohanreddybodha05@gmail.com](mailto:mohanreddybodha05@gmail.com)
+
+
 
 
 ---
