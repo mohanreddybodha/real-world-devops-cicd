@@ -147,7 +147,7 @@ Monitoring is deployed before the application to ensure observability from day o
 | Path | Namespace | Service |
 | :--- | :--- | :--- |
 | `/app` | `app` | `app-service` |
-| `/grafana` | `monitoring` | `` |monitoring-grafana
+| `/grafana` | `monitoring` | `monitoring-grafana` |
 | `/prometheus` | `monitoring` | `monitoring-kube-prometheus-prometheus` |
 | `/alertmanager` | `monitoring` | `monitoring-kube-prometheus-alertmanager` |
 
