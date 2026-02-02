@@ -35,6 +35,7 @@ GitHub
 **AWS ALB** (Ingress)  
   ↓  
 **Application + Monitoring Stack** 
+
   ↓  
 **Slack Alerts** (Alertmanager)
 
@@ -144,7 +145,7 @@ Monitoring is deployed before the application to ensure observability from day o
 ### **Final Routing Table**
 | Path | Namespace | Service |
 | :--- | :--- | :--- |
-| `/app` | `default` | `app-service` |
+| `/app` | `app` | `app-service` |
 | `/grafana` | `monitoring` | `grafana` |
 | `/prometheus` | `monitoring` | `prometheus` |
 | `/alertmanager` | `monitoring` | `alertmanager` |
