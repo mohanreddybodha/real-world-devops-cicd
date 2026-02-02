@@ -24,6 +24,7 @@ The system is built with production best practices, idempotent automation, and c
 GitHub
    
   ↓ (Webhook)  
+
 **Jenkins** (Docker container)  
   ↓  
 **Terraform** (AWS Infrastructure)  
@@ -146,9 +147,9 @@ Monitoring is deployed before the application to ensure observability from day o
 | Path | Namespace | Service |
 | :--- | :--- | :--- |
 | `/app` | `app` | `app-service` |
-| `/grafana` | `monitoring` | `grafana` |
-| `/prometheus` | `monitoring` | `prometheus` |
-| `/alertmanager` | `monitoring` | `alertmanager` |
+| `/grafana` | `monitoring` | `` |monitoring-grafana
+| `/prometheus` | `monitoring` | `monitoring-kube-prometheus-prometheus` |
+| `/alertmanager` | `monitoring` | `monitoring-kube-prometheus-alertmanager` |
 
 > **Why target-type = instance?** > Avoids ENI / providerID issues in kubeadm clusters and works reliably with NodePort.
 
@@ -218,7 +219,7 @@ This project was not a one-click deployment. Multiple failures occurred across i
 
 * **Observed Symptoms:** HTML loaded correctly, but CSS and JS were missing (Broken UI).
 * **Root Cause:** Application was served behind `/app`, but frontend assets pointed to `/`.
-* **Fix Applied:** Updated frontend paths to align with ingress: `<link rel="stylesheet" href="/app/style.css">`.
+* **Fix Applied:** Updated frontend paths to align with ingress: `<link rel="stylesheet" href="style.css" />`.
 
 ---
 
