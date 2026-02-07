@@ -29,33 +29,13 @@ resource "aws_iam_role" "k8s_worker_role" {
   })
 }
 
-resource "aws_iam_policy" "k8s_lb_policy" {
-  name = "k8s-lb-policy"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ec2:*",
-        "elasticloadbalancing:*",
-        "iam:PassRole",
-        "iam:CreateServiceLinkedRole",
-        "shield:GetSubscriptionState",
-        "shield:DescribeProtection",
-        "shield:CreateProtection",
-        "shield:DeleteProtection"
-      ]
-      Resource = "*"
-    }]
-  })
-}
-
+# Attach AWS managed Load Balancer Controller policy (CORRECT)
 resource "aws_iam_role_policy_attachment" "attach_lb_policy" {
   role       = aws_iam_role.k8s_worker_role.name
-  policy_arn = aws_iam_policy.k8s_lb_policy.arn
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSLoadBalancerControllerPolicy"
 }
 
+# Instance profile must reference ROLE NAME (FIXED)
 resource "aws_iam_instance_profile" "k8s_worker_profile" {
   name = "k8s-worker-profile"
   role = aws_iam_role.k8s_worker_role.name
@@ -119,13 +99,15 @@ resource "aws_security_group" "k8s_sg" {
 }
 
 #######################################
-# Master Node
+# Master Node (IAM PROFILE ADDED)
 #######################################
 resource "aws_instance" "master" {
   ami                    = var.ami
   instance_type          = "t2.medium"
   key_name               = var.key_name
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
+
+  iam_instance_profile = aws_iam_instance_profile.k8s_worker_profile.name
 
   user_data = <<-EOF
     #!/bin/bash
