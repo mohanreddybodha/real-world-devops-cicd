@@ -14,6 +14,7 @@ pipeline {
     IMAGE_TAG    = "v${BUILD_NUMBER}"
     DOCKER_CREDS = "dockerhub-creds"
     SSH_CREDS    = "ec2-ssh-key"
+
     ANSIBLE_HOST_KEY_CHECKING = "False"
   }
 
@@ -30,16 +31,6 @@ pipeline {
     stage('Checkout Code') {
       steps {
         checkout scm
-      }
-    }
-
-    stage('Validate Parameters') {
-      steps {
-        script {
-          if (!env.ALB_DNS?.trim()) {
-            error "ALB_DNS parameter is required"
-          }
-        }
       }
     }
 
@@ -89,6 +80,9 @@ pipeline {
     /* -------------------- TERRAFORM -------------------- */
 
     stage('Terraform Init & Apply') {
+      when {
+        expression { params.RUN_TERRAFORM }
+      }
       steps {
         dir('terraform') {
           sh """
@@ -151,7 +145,47 @@ ${workers}
       }
     }
 
-    /* -------------------- MONITORING  ------------------------ */
+    /* -------------------- APPLICATION (APP + INGRESS) -------------------- */
+
+    stage('Deploy Application (App + SVC + Ingress)') {
+      steps {
+        sshagent(credentials: [SSH_CREDS]) {
+          dir('ansible') {
+            sh """
+              ansible-playbook -i inventory.ini deploy-app.yaml \
+                -e IMAGE_NAME=${IMAGE_NAME} \
+                -e IMAGE_TAG=${IMAGE_TAG}
+            """
+          }
+        }
+      }
+    }
+
+    /* -------------------- FETCH ALB -------------------- */
+
+    stage('Fetch ALB DNS') {
+      steps {
+        script {
+          env.ALB_DNS = sh(
+            script: """
+              ssh -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null \
+                  ubuntu@${env.MASTER_IP} \
+                  "kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
+            """,
+            returnStdout: true
+          ).trim()
+
+          if (!env.ALB_DNS) {
+            error "ALB DNS not available yet"
+          }
+
+          echo "Resolved ALB DNS: ${env.ALB_DNS}"
+        }
+      }
+    }
+
+    /* -------------------- MONITORING -------------------- */
 
     stage('Deploy Monitoring') {
       steps {
@@ -183,28 +217,11 @@ ${workers}
         }
       }
     }
-
-    /* -------------------- APPLICATION -------------------- */
-
-    stage('Deploy Application to Kubernetes') {
-      steps {
-        sshagent(credentials: [SSH_CREDS]) {
-          dir('ansible') {
-            sh """
-              ansible-playbook -i inventory.ini deploy-app.yaml \
-                -e IMAGE_NAME=${IMAGE_NAME} \
-                -e IMAGE_TAG=${IMAGE_TAG} 
-               
-            """
-          }
-        }
-      }
-    }
   }
 
   post {
     success {
-      echo "✅ CI/CD + Kubernetes + Monitoring + Slack Alerts completed successfully"
+      echo "✅ Infra + App + Ingress + Monitoring deployed successfully"
     }
     failure {
       echo "❌ Pipeline failed. Check logs."
