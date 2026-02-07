@@ -87,8 +87,7 @@ pipeline {
         dir('terraform') {
           sh """
             terraform init -input=false
-            terraform apply -auto-approve -input=false \
-              -var="admin_ip_cidr=$params.ADMIN_IP_CIDR"
+            terraform apply -auto-approve -input=false 
           """
         }
       }
@@ -161,26 +160,28 @@ ${workers}
       }
     }
 
-    /* -------------------- FETCH ALB -------------------- */
+    /* -------------------- FETCH ALB (FIXED) -------------------- */
 
     stage('Fetch ALB DNS') {
       steps {
-        script {
-          env.ALB_DNS = sh(
-            script: """
-              ssh -o StrictHostKeyChecking=no \
-                  -o UserKnownHostsFile=/dev/null \
-                  ubuntu@${env.MASTER_IP} \
-                  "kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
-            """,
-            returnStdout: true
-          ).trim()
+        sshagent(credentials: [SSH_CREDS]) {
+          script {
+            env.ALB_DNS = sh(
+              script: """
+                ssh -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    ubuntu@${env.MASTER_IP} \
+                    "kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
+              """,
+              returnStdout: true
+            ).trim()
 
-          if (!env.ALB_DNS) {
-            error "ALB DNS not available yet"
+            if (!env.ALB_DNS) {
+              error "ALB DNS not available yet"
+            }
+
+            echo "Resolved ALB DNS: ${env.ALB_DNS}"
           }
-
-          echo "Resolved ALB DNS: ${env.ALB_DNS}"
         }
       }
     }
