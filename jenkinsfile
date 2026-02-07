@@ -206,7 +206,6 @@ ${workers}
                 helm repo update &&
                 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
                   -n monitoring \
-                  --create-namespace \
                   -f /tmp/monitoring-values.yaml \
                   --set alertmanager.alertmanagerSpec.externalUrl=http://${ALB_DNS}/alertmanager \
                   --timeout 15m \
