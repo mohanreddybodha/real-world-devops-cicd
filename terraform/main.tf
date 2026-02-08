@@ -8,7 +8,7 @@ provider "aws" {
 terraform {
   backend "s3" {
     bucket = "terraform-state-jenkins-191"
-    key    = "terraform-statefile/terraform.tfstate"
+    key    = "k8s/terraform.tfstate"
     region = "ap-south-1"
   }
 }
@@ -17,7 +17,7 @@ terraform {
 # IAM (For Kubernetes LoadBalancer)
 ########################################
 resource "aws_iam_role" "k8s_worker_role" {
-  name = "k8s-worker-load-balancer-role"
+  name = "k8s-worker-lb-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -53,7 +53,7 @@ resource "aws_iam_role_policy_attachment" "attach_lb_policy" {
 }
 
 resource "aws_iam_instance_profile" "k8s_worker_profile" {
-  name = "k8s--worker--profile"
+  name = "k8s-worker-profile"
   role = aws_iam_role.k8s_worker_role.name
 }
 
