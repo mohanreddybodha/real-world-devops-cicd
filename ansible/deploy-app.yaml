@@ -24,6 +24,10 @@
     # Apply NON-INGRESS resources first (SAFE)
     # --------------------------------------------------
 
+    - name: Create monitoring namespace
+      become_user: ubuntu
+      shell: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+
     - name: Create application namespace
       become_user: ubuntu
       shell: kubectl create namespace app --dry-run=client -o yaml | kubectl apply -f -
