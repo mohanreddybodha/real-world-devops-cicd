@@ -148,3 +148,68 @@
     when: webhook_svc.rc == 0
     failed_when: false
     changed_when: false
+
+  # ==================================================
+  # PATCH WORKER NODES WITH PROVIDER ID (INSTANCE MODE)
+  # ==================================================
+
+  - name: Patch worker nodes with AWS providerID
+    become_user: ubuntu
+    vars:
+      workers: "{{ groups['workers'] }}"
+    loop: "{{ workers }}"
+    loop_control:
+      loop_var: worker
+    block:
+
+      - name: Get EC2 instance-id from worker
+        delegate_to: "{{ worker }}"
+        uri:
+          url: http://169.254.169.254/latest/meta-data/instance-id
+          return_content: yes
+        register: ec2_instance_id
+        changed_when: false
+
+      - name: Get EC2 availability zone from worker
+        delegate_to: "{{ worker }}"
+        uri:
+          url: http://169.254.169.254/latest/meta-data/placement/availability-zone
+          return_content: yes
+        register: ec2_az
+        changed_when: false
+
+      - name: Get Kubernetes node name for worker
+        shell: |
+          kubectl get nodes -o wide | awk '$6 == "{{ hostvars[worker].ansible_default_ipv4.address }}" {print $1}'
+        register: k8s_node_name
+        changed_when: false
+
+      - name: Fail if Kubernetes node name not found
+        when: k8s_node_name.stdout == ""
+        fail:
+          msg: "Kubernetes node not found for worker {{ worker }}"
+
+      - name: Check existing providerID
+        shell: |
+          kubectl get node {{ k8s_node_name.stdout }} -o jsonpath='{.spec.providerID}'
+        register: providerid_check
+        changed_when: false
+
+      - name: Patch providerID on Kubernetes node
+        when: providerid_check.stdout == ""
+        shell: |
+          kubectl patch node {{ k8s_node_name.stdout }} \
+          -p '{"spec":{"providerID":"aws:///{{ ec2_az.content }}/{{ ec2_instance_id.content }}"}}'
+        environment:
+          KUBECONFIG: "{{ kubeconfig }}"
+
+  # ==================================================
+  # RESTART AWS LOAD BALANCER CONTROLLER (RECONCILE)
+  # ==================================================
+
+  - name: Restart AWS Load Balancer Controller
+    become_user: ubuntu
+    shell: |
+      kubectl rollout restart deployment aws-load-balancer-controller -n kube-system
+    environment:
+      KUBECONFIG: "{{ kubeconfig }}"
