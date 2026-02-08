@@ -72,9 +72,6 @@ pipeline {
     /* -------------------- TERRAFORM -------------------- */
 
     stage('Terraform Init & Apply') {
-      when {
-        expression { params.RUN_TERRAFORM }
-      }
       steps {
         dir('terraform') {
           sh """
