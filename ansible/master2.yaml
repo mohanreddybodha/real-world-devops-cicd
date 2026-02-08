@@ -101,44 +101,77 @@
         -n kube-system --timeout=5m
 
   # ==================================================
+  # WEBHOOK CERT + TLS (STRONG GUARDS)
+  # ==================================================
+
+  - name: Check webhook CA bundle size
+    become_user: ubuntu
+    shell: |
+      kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
+      -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
+    register: ca_bundle
+    failed_when: false
+    changed_when: false
+
+  - name: Wait for AWS LB webhook CA bundle injection
+    become_user: ubuntu
+    shell: |
+      kubectl get validatingwebhookconfiguration aws-load-balancer-webhook \
+        -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | wc -c
+    register: ca_bundle_wait
+    retries: 30
+    delay: 10
+    until: ca_bundle_wait.stdout | int > 100
+    when: ca_bundle.stdout | int < 100
+    failed_when: false
+    changed_when: false
+
+  - name: Check if webhook service exists
+    become_user: ubuntu
+    shell: kubectl get svc aws-load-balancer-webhook-service -n kube-system
+    register: webhook_svc
+    failed_when: false
+    changed_when: false
+
+  - name: Wait for AWS LB webhook TLS endpoint
+    become_user: ubuntu
+    shell: |
+      kubectl run tmp-webhook-test \
+        --rm -i --restart=Never \
+        --image=curlimages/curl:8.5.0 \
+        -- \
+        curl -sk https://aws-load-balancer-webhook-service.kube-system.svc:443/healthz
+    register: webhook_test
+    retries: 30
+    delay: 10
+    until: webhook_test.rc == 0
+    when: webhook_svc.rc == 0
+    failed_when: false
+    changed_when: false
+
+  # ==================================================
   # PATCH WORKER NODES WITH PROVIDER ID (INSTANCE MODE)
   # ==================================================
 
-  - name: Get EC2 instance-id from workers
+  - name: Get Kubernetes nodes without providerID
     become_user: ubuntu
-    delegate_to: "{{ item }}"
-    uri:
-      url: http://169.254.169.254/latest/meta-data/instance-id
-      return_content: yes
-    register: ec2_instance_ids
-    loop: "{{ groups['workers'] }}"
-    changed_when: false
-
-  - name: Get EC2 availability zone from workers
-    become_user: ubuntu
-    delegate_to: "{{ item }}"
-    uri:
-      url: http://169.254.169.254/latest/meta-data/placement/availability-zone
-      return_content: yes
-    register: ec2_azs
-    loop: "{{ groups['workers'] }}"
-    changed_when: false
-
-  - name: Patch providerID on Kubernetes worker nodes
-    become_user: ubuntu
-    loop: "{{ groups['workers'] }}"
-    vars:
-      idx: "{{ ansible_loop.index0 }}"
-      worker_ip: "{{ hostvars[item].ansible_default_ipv4.address }}"
     shell: |
-      NODE_NAME=$(kubectl get nodes -o wide | awk '$6 == "{{ worker_ip }}" {print $1}')
-      CURRENT_PROVIDER=$(kubectl get node $NODE_NAME -o jsonpath='{.spec.providerID}')
-      if [ -z "$CURRENT_PROVIDER" ]; then
-        kubectl patch node $NODE_NAME \
-        -p '{"spec":{"providerID":"aws:///{{ ec2_azs.results[idx].content }}/{{ ec2_instance_ids.results[idx].content }}"}}'
-      fi
+      kubectl get nodes -o jsonpath='{range .items[?(@.spec.providerID=="")]}{.metadata.name}{"\n"}{end}'
+    register: nodes_without_providerid
+    changed_when: false
+
+  - name: Patch providerID on Kubernetes nodes
+    become_user: ubuntu
+    loop: "{{ nodes_without_providerid.stdout_lines }}"
+    shell: |
+      INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+      AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+
+      kubectl patch node {{ item }} \
+      -p "{\"spec\":{\"providerID\":\"aws:///${AZ}/${INSTANCE_ID}\"}}"
     environment:
       KUBECONFIG: "{{ kubeconfig }}"
+    when: nodes_without_providerid.stdout != ""
 
   # ==================================================
   # RESTART AWS LOAD BALANCER CONTROLLER (RECONCILE)
