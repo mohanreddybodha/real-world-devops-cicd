@@ -157,28 +157,27 @@
     changed_when: false
 
   # ==================================================
-  # PATCH WORKER NODES WITH PROVIDER ID (INSTANCE MODE)
+  # PATCH WORKER NODES WITH PROVIDER ID (CORRECT)
   # ==================================================
 
-  - name: Get Kubernetes nodes without providerID
+  - name: Patch providerID for worker nodes correctly
     become_user: ubuntu
     shell: |
-      kubectl get nodes -o jsonpath='{range .items[?(@.spec.providerID=="")]}{.metadata.name}{"\n"}{end}'
-    register: nodes_without_providerid
-    changed_when: false
+      for node in $(kubectl get nodes --no-headers | awk '{print $1}'); do
+        PROVIDER_ID=$(kubectl get node $node -o jsonpath='{.spec.providerID}')
+        if [ -z "$PROVIDER_ID" ]; then
+          NODE_IP=$(kubectl get node $node -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+          INSTANCE_ID=$(ssh -o StrictHostKeyChecking=no ubuntu@$NODE_IP \
+            "curl -s http://169.254.169.254/latest/meta-data/instance-id")
+          AZ=$(ssh -o StrictHostKeyChecking=no ubuntu@$NODE_IP \
+            "curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone")
 
-  - name: Patch providerID on Kubernetes nodes
-    become_user: ubuntu
-    loop: "{{ nodes_without_providerid.stdout_lines }}"
-    shell: |
-      INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-      AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
-
-      kubectl patch node {{ item }} \
-      -p "{\"spec\":{\"providerID\":\"aws:///${AZ}/${INSTANCE_ID}\"}}"
+          kubectl patch node $node \
+            -p "{\"spec\":{\"providerID\":\"aws:///$AZ/$INSTANCE_ID\"}}"
+        fi
+      done
     environment:
       KUBECONFIG: "{{ kubeconfig }}"
-    when: nodes_without_providerid.stdout != ""
 
   # ==================================================
   # RESTART AWS LOAD BALANCER CONTROLLER (RECONCILE)
