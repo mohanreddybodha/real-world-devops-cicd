@@ -8,7 +8,7 @@ provider "aws" {
 terraform {
   backend "s3" {
     bucket = "terraform-state-jenkins-191"
-    key    = "k8s/terraform.tfstate"
+    key    = "terraform-statefile/terraform.tfstate"
     region = "ap-south-1"
   }
 }
