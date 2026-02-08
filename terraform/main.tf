@@ -17,7 +17,7 @@ terraform {
 # IAM (For Kubernetes LoadBalancer)
 ########################################
 resource "aws_iam_role" "k8s_worker_role" {
-  name = "k8s-worker-lb-role"
+  name = "k8's-worker-lb-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
