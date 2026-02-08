@@ -61,7 +61,7 @@ resource "aws_iam_instance_profile" "k8s_worker_profile" {
 # Security Group
 ########################################
 resource "aws_security_group" "k8s_sg" {
-  name        = "k8s-sgs"
+  name        = "k8s-sg"
   description = "Security group for kubeadm Kubernetes cluster"
 
   ingress {
