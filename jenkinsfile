@@ -149,27 +149,35 @@ ${workers}
       }
     }
 
-    /* -------------------- FETCH ALB (FIXED) -------------------- */
+    /* -------------------- FETCH ALB (FIXED WITH RETRY) -------------------- */
 
     stage('Fetch ALB DNS') {
       steps {
         sshagent(credentials: [SSH_CREDS]) {
           script {
-            env.ALB_DNS = sh(
-              script: """
-                ssh -o StrictHostKeyChecking=no \
-                    -o UserKnownHostsFile=/dev/null \
-                    ubuntu@${env.MASTER_IP} \
-                    "kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
-              """,
-              returnStdout: true
-            ).trim()
+            echo "Waiting for AWS ALB to provision DNS..."
+            
+            // Retry up to 10 times with a 30-second delay between attempts
+            retry(10) {
+              sleep time: 30, unit: 'SECONDS' // AWS Provisioning takes time
+              
+              def resolved_dns = sh(
+                script: """
+                  ssh -o StrictHostKeyChecking=no \
+                      -o UserKnownHostsFile=/dev/null \
+                      ubuntu@${env.MASTER_IP} \
+                      "kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
+                """,
+                returnStdout: true
+              ).trim()
 
-            if (!env.ALB_DNS) {
-              error "ALB DNS not available yet"
+              if (!resolved_dns || resolved_dns == "") {
+                error "ALB DNS not available yet. Retrying..."
+              } else {
+                env.ALB_DNS = resolved_dns
+                echo "Successfully Resolved ALB DNS: ${env.ALB_DNS}"
+              }
             }
-
-            echo "Resolved ALB DNS: ${env.ALB_DNS}"
           }
         }
       }
@@ -181,27 +189,30 @@ ${workers}
       steps {
         withCredentials([string(credentialsId: 'SLACK_WEBHOOK_URL', variable: 'SLACK_WEBHOOK_URL')]) {
           sshagent(credentials: [SSH_CREDS]) {
-            sh '''
-              sed "s|__SLACK_WEBHOOK__|$SLACK_WEBHOOK_URL|g" monitoring-values.yaml > monitoring-values-final.yaml
+            sh """
+              # Inject Slack Webhook into local monitoring file
+              sed "s|__SLACK_WEBHOOK__|\$SLACK_WEBHOOK_URL|g" monitoring-values.yaml > monitoring-values-final.yaml
 
+              # Securely copy final values to the Master node
               scp -o StrictHostKeyChecking=no \
                   -o UserKnownHostsFile=/dev/null \
                   monitoring-values-final.yaml \
-                ubuntu@${MASTER_IP}:/tmp/monitoring-values.yaml
+                ubuntu@\${MASTER_IP}:/tmp/monitoring-values.yaml
 
+              # Run Helm Upgrade using the resolved ALB DNS
               ssh -o StrictHostKeyChecking=no \
                   -o UserKnownHostsFile=/dev/null \
-                  ubuntu@${MASTER_IP} '
+                  ubuntu@\${MASTER_IP} "
                 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true &&
                 helm repo update &&
                 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
                   -n monitoring \
                   -f /tmp/monitoring-values.yaml \
-                  --set alertmanager.alertmanagerSpec.externalUrl=http://${ALB_DNS}/alertmanager \
+                  --set alertmanager.alertmanagerSpec.externalUrl=http://${env.ALB_DNS}/alertmanager \
                   --timeout 15m \
                   --wait
-              '
-            '''
+              "
+            """
           }
         }
       }
