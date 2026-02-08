@@ -157,23 +157,33 @@
     changed_when: false
 
   # ==================================================
-  # PATCH WORKER NODES WITH PROVIDER ID (CORRECT)
+  # PATCH WORKER NODES WITH PROVIDER ID (FINAL FIX)
   # ==================================================
 
-  - name: Patch providerID for worker nodes correctly
+  - name: Patch providerID for WORKER nodes only
     become_user: ubuntu
     shell: |
+      REGION="{{ region }}"
+
       for node in $(kubectl get nodes --no-headers | awk '{print $1}'); do
+
+        # Skip control-plane node
+        ROLE=$(kubectl get node $node -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}')
+        if [ -n "$ROLE" ]; then
+          continue
+        fi
+
         PROVIDER_ID=$(kubectl get node $node -o jsonpath='{.spec.providerID}')
         if [ -z "$PROVIDER_ID" ]; then
+
           NODE_IP=$(kubectl get node $node -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+
           INSTANCE_ID=$(ssh -o StrictHostKeyChecking=no ubuntu@$NODE_IP \
             "curl -s http://169.254.169.254/latest/meta-data/instance-id")
-          AZ=$(ssh -o StrictHostKeyChecking=no ubuntu@$NODE_IP \
-            "curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone")
 
           kubectl patch node $node \
-            -p "{\"spec\":{\"providerID\":\"aws:///$AZ/$INSTANCE_ID\"}}"
+            -p "{\"spec\":{\"providerID\":\"aws:///${REGION}/${INSTANCE_ID}\"}}"
+
         fi
       done
     environment:
