@@ -1,19 +1,12 @@
 pipeline {
   agent any
 
-  parameters {
-    booleanParam(
-      name: 'RUN_TERRAFORM',
-      defaultValue: false,
-      description: 'Run Terraform apply (enable ONLY when infra changes)'
-    )
-  }
-
   environment {
     IMAGE_NAME   = "mohanreddybodha/feedback"
     IMAGE_TAG    = "v${BUILD_NUMBER}"
     DOCKER_CREDS = "dockerhub-creds"
     SSH_CREDS    = "ec2-ssh-key"
+
     ANSIBLE_HOST_KEY_CHECKING = "False"
   }
 
@@ -30,16 +23,6 @@ pipeline {
     stage('Checkout Code') {
       steps {
         checkout scm
-      }
-    }
-
-    stage('Validate Parameters') {
-      steps {
-        script {
-          if (!env.ALB_DNS?.trim()) {
-            error "ALB_DNS parameter is required"
-          }
-        }
       }
     }
 
@@ -89,12 +72,14 @@ pipeline {
     /* -------------------- TERRAFORM -------------------- */
 
     stage('Terraform Init & Apply') {
+      when {
+        expression { params.RUN_TERRAFORM }
+      }
       steps {
         dir('terraform') {
           sh """
             terraform init -input=false
-            terraform apply -auto-approve -input=false \
-              -var="admin_ip_cidr=$params.ADMIN_IP_CIDR"
+            terraform apply -auto-approve -input=false 
           """
         }
       }
@@ -151,7 +136,49 @@ ${workers}
       }
     }
 
-    /* -------------------- MONITORING  ------------------------ */
+    /* -------------------- APPLICATION (APP + INGRESS) -------------------- */
+
+    stage('Deploy Application (App + SVC + Ingress)') {
+      steps {
+        sshagent(credentials: [SSH_CREDS]) {
+          dir('ansible') {
+            sh """
+              ansible-playbook -i inventory.ini deploy-app.yaml \
+                -e IMAGE_NAME=${IMAGE_NAME} \
+                -e IMAGE_TAG=${IMAGE_TAG}
+            """
+          }
+        }
+      }
+    }
+
+    /* -------------------- FETCH ALB (FIXED) -------------------- */
+
+    stage('Fetch ALB DNS') {
+      steps {
+        sshagent(credentials: [SSH_CREDS]) {
+          script {
+            env.ALB_DNS = sh(
+              script: """
+                ssh -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    ubuntu@${env.MASTER_IP} \
+                    "kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
+              """,
+              returnStdout: true
+            ).trim()
+
+            if (!env.ALB_DNS) {
+              error "ALB DNS not available yet"
+            }
+
+            echo "Resolved ALB DNS: ${env.ALB_DNS}"
+          }
+        }
+      }
+    }
+
+    /* -------------------- MONITORING -------------------- */
 
     stage('Deploy Monitoring') {
       steps {
@@ -172,7 +199,6 @@ ${workers}
                 helm repo update &&
                 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
                   -n monitoring \
-                  --create-namespace \
                   -f /tmp/monitoring-values.yaml \
                   --set alertmanager.alertmanagerSpec.externalUrl=http://${ALB_DNS}/alertmanager \
                   --timeout 15m \
@@ -183,28 +209,11 @@ ${workers}
         }
       }
     }
-
-    /* -------------------- APPLICATION -------------------- */
-
-    stage('Deploy Application to Kubernetes') {
-      steps {
-        sshagent(credentials: [SSH_CREDS]) {
-          dir('ansible') {
-            sh """
-              ansible-playbook -i inventory.ini deploy-app.yaml \
-                -e IMAGE_NAME=${IMAGE_NAME} \
-                -e IMAGE_TAG=${IMAGE_TAG} 
-               
-            """
-          }
-        }
-      }
-    }
   }
 
   post {
     success {
-      echo "✅ CI/CD + Kubernetes + Monitoring + Slack Alerts completed successfully"
+      echo "✅ Infra + App + Ingress + Monitoring deployed successfully"
     }
     failure {
       echo "❌ Pipeline failed. Check logs."
