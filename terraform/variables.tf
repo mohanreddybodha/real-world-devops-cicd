@@ -18,8 +18,6 @@ variable "worker_count" {
   default     = 2
 }
 
-variable "admin_ip_cidr" {
-  description = "Admin public IP CIDR for SSH / restricted access"
-  type        = string
-}
+
+
 
