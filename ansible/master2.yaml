@@ -160,23 +160,27 @@
   # PATCH WORKER NODES WITH PROVIDER ID (AUTOMATED FIX)
   # ==================================================
 
-  - name: Get AWS Instance ID from workers
+  # 1. Fetch both Instance ID AND Internal Hostname from workers
+  - name: Get AWS Metadata from workers
     delegate_to: "{{ item }}"
     delegate_facts: true
     loop: "{{ groups['workers'] }}"
-    uri:
-      url: http://169.254.169.254/latest/meta-data/instance-id
-      return_content: yes
-    register: worker_instance_ids
+    shell: |
+      echo "$(curl -s http://169.254.169.254/latest/meta-data/instance-id):$(hostname)"
+    register: worker_metadata
     changed_when: false
 
+  # 2. Apply the patch using the internal hostname instead of the IP
   - name: Apply providerID patch to Kubernetes nodes
     become_user: ubuntu
     shell: |
-      kubectl patch node {{ item.item }} \
-      -p "{\"spec\":{\"providerID\":\"aws:///{{ region }}/{{ item.content }}\"}}"
-    loop: "{{ worker_instance_ids.results }}"
-    when: item.status == 200
+      INSTANCE_ID=$(echo "{{ item.stdout }}" | cut -d':' -f1)
+      NODE_NAME=$(echo "{{ item.stdout }}" | cut -d':' -f2)
+      
+      kubectl patch node $NODE_NAME \
+      -p "{\"spec\":{\"providerID\":\"aws:///{{ region }}/$INSTANCE_ID\"}}"
+    loop: "{{ worker_metadata.results }}"
+    when: item.rc == 0
     environment:
       KUBECONFIG: "{{ kubeconfig }}"
 
