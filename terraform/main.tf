@@ -30,7 +30,7 @@ resource "aws_iam_role" "k8s_worker_role" {
 }
 
 resource "aws_iam_policy" "k8s_lb_policy" {
-  name = "k8s--lb--policy"
+  name = "k8s-lb-policy"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -53,7 +53,7 @@ resource "aws_iam_role_policy_attachment" "attach_lb_policy" {
 }
 
 resource "aws_iam_instance_profile" "k8s_worker_profile" {
-  name = "k8s-worker-profile"
+  name = "k8s--worker--profile"
   role = aws_iam_role.k8s_worker_role.name
 }
 
