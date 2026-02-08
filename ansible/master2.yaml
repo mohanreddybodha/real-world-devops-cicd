@@ -7,6 +7,13 @@
 
   tasks:
 
+  - name: Ensure ubuntu can access kubeconfig
+    file:
+      path: /etc/kubernetes/admin.conf
+      owner: ubuntu
+      group: ubuntu
+      mode: '0644'
+
   # ==================================================
   # CLUSTER GUARD (FAIL FAST)
   # ==================================================
