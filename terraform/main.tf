@@ -30,7 +30,7 @@ resource "aws_iam_role" "k8s_worker_role" {
 }
 
 resource "aws_iam_policy" "k8s_lb_policy" {
-  name = "k8s-lb-policy"
+  name = "k8s--lb--policy"
 
   policy = jsonencode({
     Version = "2012-10-17"
