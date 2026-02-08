@@ -157,7 +157,7 @@
     changed_when: false
 
   # ==================================================
-  # PATCH WORKER NODES WITH PROVIDER ID (AUTOMATED FIX)
+  # PATCH WORKER NODES WITH PROVIDER ID (FINAL ROBUST FIX)
   # ==================================================
 
   # 1. Fetch both Instance ID AND Internal Hostname from workers
@@ -170,15 +170,21 @@
     register: worker_metadata
     changed_when: false
 
-  # 2. Apply the patch using the internal hostname instead of the IP
+  # 2. Apply the patch using a "clear-and-reset" logic to bypass Forbidden errors
   - name: Apply providerID patch to Kubernetes nodes
     become_user: ubuntu
     shell: |
       INSTANCE_ID=$(echo "{{ item.stdout }}" | cut -d':' -f1)
       NODE_NAME=$(echo "{{ item.stdout }}" | cut -d':' -f2)
+      NEW_ID="aws:///{{ region }}/$INSTANCE_ID"
       
-      kubectl patch node $NODE_NAME \
-      -p "{\"spec\":{\"providerID\":\"aws:///{{ region }}/$INSTANCE_ID\"}}"
+      CURRENT_ID=$(kubectl get node $NODE_NAME -o jsonpath='{.spec.providerID}')
+      
+      if [ "$CURRENT_ID" != "$NEW_ID" ]; then
+        # Reset to empty string first to allow the update
+        kubectl patch node $NODE_NAME -p '{"spec":{"providerID":""}}'
+        kubectl patch node $NODE_NAME -p "{\"spec\":{\"providerID\":\"$NEW_ID\"}}"
+      fi
     loop: "{{ worker_metadata.results }}"
     when: item.rc == 0
     environment:
