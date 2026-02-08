@@ -77,6 +77,7 @@ pipeline {
           sh """
             terraform init -input=false -reconfigure
             terraform apply -auto-approve -input=false 
+            terraform destroy -auto-approve -input=false 
           """
         }
       }
