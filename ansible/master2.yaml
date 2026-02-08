@@ -157,35 +157,26 @@
     changed_when: false
 
   # ==================================================
-  # PATCH WORKER NODES WITH PROVIDER ID (FINAL FIX)
+  # PATCH WORKER NODES WITH PROVIDER ID (AUTOMATED FIX)
   # ==================================================
 
-  - name: Patch providerID for WORKER nodes only
+  - name: Get AWS Instance ID from workers
+    delegate_to: "{{ item }}"
+    delegate_facts: true
+    loop: "{{ groups['workers'] }}"
+    uri:
+      url: http://169.254.169.254/latest/meta-data/instance-id
+      return_content: yes
+    register: worker_instance_ids
+    changed_when: false
+
+  - name: Apply providerID patch to Kubernetes nodes
     become_user: ubuntu
     shell: |
-      REGION="{{ region }}"
-
-      for node in $(kubectl get nodes --no-headers | awk '{print $1}'); do
-
-        # Skip control-plane node
-        ROLE=$(kubectl get node $node -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}')
-        if [ -n "$ROLE" ]; then
-          continue
-        fi
-
-        PROVIDER_ID=$(kubectl get node $node -o jsonpath='{.spec.providerID}')
-        if [ -z "$PROVIDER_ID" ]; then
-
-          NODE_IP=$(kubectl get node $node -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
-
-          INSTANCE_ID=$(ssh -o StrictHostKeyChecking=no ubuntu@$NODE_IP \
-            "curl -s http://169.254.169.254/latest/meta-data/instance-id")
-
-          kubectl patch node $node \
-            -p "{\"spec\":{\"providerID\":\"aws:///${REGION}/${INSTANCE_ID}\"}}"
-
-        fi
-      done
+      kubectl patch node {{ item.item }} \
+      -p "{\"spec\":{\"providerID\":\"aws:///{{ region }}/{{ item.content }}\"}}"
+    loop: "{{ worker_instance_ids.results }}"
+    when: item.status == 200
     environment:
       KUBECONFIG: "{{ kubeconfig }}"
 
