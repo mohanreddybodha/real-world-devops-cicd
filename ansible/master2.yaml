@@ -14,6 +14,12 @@
       group: ubuntu
       mode: '0644'
 
+  - name: Ensure jq is installed for JSON processing
+    apt:
+      name: jq
+      state: present
+      update_cache: yes
+
   # ==================================================
   # CLUSTER GUARD (FAIL FAST)
   # ==================================================
@@ -157,10 +163,9 @@
     changed_when: false
 
   # ==================================================
-  # PATCH WORKER NODES WITH PROVIDER ID (JSON PATCH FIX)
+  # PATCH WORKER NODES WITH PROVIDER ID (RESET & PATCH)
   # ==================================================
 
-  # 1. Fetch both Instance ID AND Internal Hostname from workers
   - name: Get AWS Metadata from workers
     delegate_to: "{{ item }}"
     delegate_facts: true
@@ -170,17 +175,19 @@
     register: worker_metadata
     changed_when: false
 
-  # 2. Use a JSON-type patch to force the providerID update
-  - name: Apply providerID patch to Kubernetes nodes
+  - name: Force Apply providerID patch
     become_user: ubuntu
     shell: |
       INSTANCE_ID=$(echo "{{ item.stdout }}" | cut -d':' -f1)
       NODE_NAME=$(echo "{{ item.stdout }}" | cut -d':' -f2)
       NEW_ID="aws:///{{ region }}/$INSTANCE_ID"
       
-      # Using JSON patch type to overcome the "Forbidden" update restriction
-      kubectl patch node $NODE_NAME --type='json' \
-        -p="[{\"op\": \"replace\", \"path\": \"/spec/providerID\", \"value\":\"$NEW_ID\"}]"
+      CURRENT_ID=$(kubectl get node $NODE_NAME -o jsonpath='{.spec.providerID}')
+      
+      if [ "$CURRENT_ID" != "$NEW_ID" ]; then
+        # Use 'kubectl replace --force' to bypass the Forbidden update restriction
+        kubectl get node $NODE_NAME -o json | jq ".spec.providerID = \"$NEW_ID\"" | kubectl replace --force -f -
+      fi
     loop: "{{ worker_metadata.results }}"
     when: item.rc == 0
     environment:
