@@ -1,4 +1,3 @@
-
 # 🚀 End-to-End DevOps CI/CD Project
 ### **Kubernetes · Jenkins · Terraform · Ansible · AWS ALB · Monitoring · Slack Alerts**
 
@@ -46,23 +45,27 @@ GitHub
 
 ### **AWS Resources Created**
 * **EC2 Instances**
-    * 1 × Master node
-    * 2 × Worker nodes
-* **Elastic IPs** for all nodes
+    * 1 × Master node (`t2.medium`)
+    * 2 × Worker nodes (`t2.medium`)
+* **Elastic IPs** for all nodes (stable IPs for SSH & debugging)
 * **Security Groups**
-    * SSH access
-    * NodePort range
-    * ALB traffic
+    * SSH access (port 22)
+    * Kubernetes API (port 6443)
+    * NodePort range (30000–32767)
+    * HTTP (80) and HTTPS (443)
+    * Self-referencing rule (inter-node communication)
 * **IAM Role & Instance Profile**
-    * Required for AWS Load Balancer Controller
+    * `k8s-worker-lb-role` — attached to worker nodes only
+    * Required for AWS Load Balancer Controller (`ec2:*`, `elasticloadbalancing:*`, `iam:PassRole`)
 * **S3 Backend**
-    * Remote Terraform state storage
+    * Remote Terraform state storage (`terraform-state-jenkins-191`)
 
 ### **Why This Design?**
 * **Worker IAM Role** is mandatory for ALB Controller.
 * **Elastic IPs** enable stable SSH & debugging.
 * **NodePort range** allows ALB target-type = instance.
 * **Remote state** enables safe Terraform re-runs.
+* **user_data bootstrap** installs Python3 on EC2 launch so Ansible can connect cleanly without raw module hacks.
 
 ---
 
@@ -72,50 +75,57 @@ Jenkins runs inside a Docker container on a **t2.medium** EC2 instance and is co
 ### **Pipeline Stages (Executed in Order)**
 
 #### **1️⃣ Code Checkout**
-Pulls application and infrastructure code from GitHub.
+Pulls application and infrastructure code from GitHub via `checkout scm`.
 
-#### **2️⃣ Parameter Validation**
-Ensures required runtime inputs (e.g., ALB DNS). Pipeline fails fast if missing.
-
-#### **3️⃣ Dependency Installation (Parallel)**
+#### **2️⃣ Dependency Installation (Parallel)**
 * **Backend:** `npm install`
 * **Frontend:** `npm install`
 
-#### **4️⃣ Frontend Build**
-Builds frontend assets and copies static files into backend public directory.
+Both run in parallel to reduce pipeline time.
 
-#### **5️⃣ Backend Validation**
-Syntax validation using `node -c`.
+#### **3️⃣ Frontend Build**
+Builds frontend assets using `npm run build` and copies compiled `dist/` into `backend/public/`.
 
-#### **6️⃣ Docker Build & Push**
-Builds Docker image and pushes to Docker Hub. **Image tag = Jenkins build number**.
+#### **4️⃣ Test Backend**
+Syntax validation using `node -c server.js`. Pipeline fails fast if syntax errors exist.
 
-#### **7️⃣ Infrastructure Provisioning (Terraform)**
-Creates or updates AWS infrastructure. Controlled via Jenkins parameter to avoid accidental re-provisioning.
+#### **5️⃣ Docker Build & Push**
+Builds Docker image and pushes to Docker Hub. **Image tag = `v$BUILD_NUMBER`** — every build produces a uniquely versioned image (`mohanreddybodha/feedback:v<BUILD_NUMBER>`).
 
-#### **8️⃣ Dynamic Ansible Inventory**
-Reads Terraform outputs and generates inventory dynamically for Master and Worker nodes.
+#### **6️⃣ Infrastructure Provisioning (Terraform)**
+Runs `terraform init` and `terraform apply` to create or update AWS infrastructure. Controlled via Jenkins parameter (`VPC_ID`) to avoid accidental re-provisioning.
 
-#### **9️⃣ Kubernetes Bootstrap (Ansible)**
-* **Common Modules:** Disable swap, Kernel module loading, Sysctl tuning, Containerd, and Kubernetes binaries.
-* **Master Node:** `kubeadm init`, Flannel CNI, CoreDNS checks, Helm installation, and Join token generation.
-* **Worker Nodes:** Safe join with retry logic.
+#### **7️⃣ Dynamic Ansible Inventory**
+Reads `terraform output` to get Master and Worker IPs and dynamically generates `ansible/inventory.ini` — no hardcoded IPs.
 
-#### **🔟 AWS Load Balancer Controller + Cert-Manager**
-Installed only if missing. Includes strong guard checks. Waits for Webhook CA bundle injection and TLS readiness to prevent random pipeline failures.
+#### **8️⃣ Kubernetes Bootstrap (Ansible)**
+Runs four playbooks in sequence:
+* **`common-modules.yaml`:** Disable swap, Kernel module loading, Sysctl tuning, Containerd setup, and Kubernetes v1.30 binaries on all nodes.
+* **`master.yaml`:** `kubeadm init`, Flannel CNI, CoreDNS readiness checks, Helm installation, and join token generation.
+* **`worker.yaml`:** Safe join with retry logic (3 retries, 30s delay).
+* **`master2.yaml`:** AWS Load Balancer Controller + Cert-Manager with strong guard checks. Patches worker nodes with AWS `providerID`. Waits for Webhook CA bundle injection and TLS readiness to prevent random pipeline failures.
+
+#### **9️⃣ Deploy Application**
+Runs `deploy-app.yaml` — copies K8s manifests to master node, renders `app-deployment.yaml.j2` Jinja2 template with the current image tag, creates namespaces idempotently, and applies deployment, service, and ingress resources.
+
+#### **🔟 Fetch ALB DNS**
+SSHs into the master node and reads `kubectl get ingress` to resolve the ALB DNS hostname. **Retries 10 times with a 30-second delay** between attempts to account for AWS provisioning time. Pipeline fails only if DNS is not resolved after all retries.
+
+#### **1️⃣1️⃣ Deploy Monitoring**
+Injects Slack Webhook URL (from Jenkins Credentials) into `monitoring-values.yaml` via `sed` — **never hardcoded**. SCPs the final values file to the master node and runs `helm upgrade --install` for `kube-prometheus-stack` with the resolved ALB DNS.
 
 ---
 
-## 📊 Monitoring Stack (Deployed Before Application)
-Monitoring is deployed before the application to ensure observability from day one.
+## 📊 Monitoring Stack
+Monitoring is deployed **after the application**, once the ALB DNS is resolved and available.
 
 ### **Components**
-| Tool | Purpose |
-| :--- | :--- |
-| **Prometheus** | Metrics collection |
-| **Grafana** | Visualization |
-| **Alertmanager** | Alert routing |
-| **Slack** | Alert notifications |
+| Tool | NodePort | Purpose |
+| :--- | :--- | :--- |
+| **Prometheus** | 30082 | Metrics collection (`routePrefix: /prometheus`) |
+| **Grafana** | 30081 | Visualization & dashboards |
+| **Alertmanager** | 30083 | Alert routing & grouping |
+| **Slack** | — | Real-time alert notifications (`#alerts`) |
 
 ### **Deployment Method**
 * **Helm:** `kube-prometheus-stack`
@@ -130,9 +140,9 @@ Monitoring is deployed before the application to ensure observability from day o
 **Prometheus → Alertmanager → Slack**
 
 ### **Key Features**
-* **Slack Webhook** stored securely in Jenkins Credentials; injected dynamically during deployment.
+* **Slack Webhook** stored securely in Jenkins Credentials; injected dynamically via `sed` during deployment.
 * **No secrets hardcoded.**
-* **Watchdog alert** used for verification.
+* **Watchdog alert** routes to `slack-notifications` for end-to-end pipeline verification.
 
 ---
 
@@ -142,16 +152,17 @@ Monitoring is deployed before the application to ensure observability from day o
 * Single Application Load Balancer
 * **Shared Ingress Group:** `main-alb`
 * Path-based routing
+* **One Ingress per namespace** — Ingress is namespace-scoped in Kubernetes; the ALB is shared via `group.name` annotation
 
 ### **Final Routing Table**
-| Path | Namespace | Service |
-| :--- | :--- | :--- |
-| `/app` | `app` | `app-service` |
-| `/grafana` | `monitoring` | `monitoring-grafana` |
-| `/prometheus` | `monitoring` | `monitoring-kube-prometheus-prometheus` |
-| `/alertmanager` | `monitoring` | `monitoring-kube-prometheus-alertmanager` |
+| Path | Namespace | Service | Port |
+| :--- | :--- | :--- | :--- |
+| `/app` | `app` | `app-service` | 80 |
+| `/grafana` | `monitoring` | `monitoring-grafana` | 80 |
+| `/prometheus` | `monitoring` | `monitoring-kube-prometheus-prometheus` | 9090 |
+| `/alertmanager` | `monitoring` | `monitoring-kube-prometheus-alertmanager` | 9093 |
 
-> **Why target-type = instance?** > Avoids ENI / providerID issues in kubeadm clusters and works reliably with NodePort.
+> **Why target-type = instance?** Avoids ENI / providerID issues in kubeadm clusters and works reliably with NodePort.
 
 ---
 
@@ -184,7 +195,7 @@ This project was not a one-click deployment. Multiple failures occurred across i
     * AWS Target Groups showed all targets as `Unhealthy`.
 * **Controller Logs:** `cannot resolve pod ENI for pods`
 * **Root Cause:** ALB `target-type` was set to `ip`. `kubeadm`-based clusters do not auto-populate `providerID`, so the Controller failed to map pods to EC2 ENIs.
-* **Fix Applied:** Switched ALB target type to `instance` and converted services to **NodePort**.
+* **Fix Applied:** Switched ALB target type to `instance` and converted services to **NodePort**. Also added `providerID` patching via `kubectl replace --force` in `master2.yaml`.
 * **Why This Matters:** > This shows a deep understanding of AWS ALB internals vs. self-managed clusters.
 
 ---
@@ -203,7 +214,7 @@ This project was not a one-click deployment. Multiple failures occurred across i
 * **Observed Symptoms:** Ingress creation randomly failed during the apply stage.
 * **Logs:** `tls: bad certificate` | `tls: private key does not match public key`
 * **Root Cause:** Race condition between `cert-manager` and the AWS LB Controller webhook. The CA bundle was not injected yet when ingress was applied.
-* **Fix Applied:** Added Ansible guard tasks to **wait for webhook CA bundle size** and verify webhook health before proceeding.
+* **Fix Applied:** Added Ansible guard tasks to **wait for webhook CA bundle size** (retries 30× until size > 100 chars) and verify webhook TLS health via in-cluster curl pod before proceeding.
 
 ---
 
@@ -298,7 +309,7 @@ This project was not a one-click deployment. Multiple failures occurred across i
 ---
 
 ## 📚 Core Learning From This Project
-> **"Production systems don’t fail once — they fail in layers. Progress comes from fixing the layer beneath the visible error."**
+> **"Production systems don't fail once — they fail in layers. Progress comes from fixing the layer beneath the visible error."**
 
 This project was completed by re-running pipelines until they became fully idempotent and identifying wrong assumptions to correct them properly.
 
@@ -336,7 +347,7 @@ It represents the outcome of hundreds of CI/CD pipeline executions, repeated fai
 During development:
 * **Many builds failed** after running for 20–30 minutes.
 * Several times the system **worked partially** and then broke after a small change.
-* Multiple issues appeared to be “the last bug” but **exposed deeper root problems**.
+* Multiple issues appeared to be "the last bug" but **exposed deeper root problems**.
 
 > *There were moments where stopping the project felt easier than continuing.*
 
@@ -379,7 +390,7 @@ This project was completed by:
 ### 👀 Guidance for Reviewers
 
 If you are reviewing this project:
-* **Do not skip the “Debugging & Issues Faced” section.**
+* **Do not skip the "Debugging & Issues Faced" section.**
 * That section reflects **real DevOps work** more than the final success state.
 * The final working system exists **because of those failures**, not despite them.
 
@@ -389,7 +400,7 @@ If you are reviewing this project:
 
 This project reinforced a critical production lesson:
 
-> **"Production systems don’t fail once — they fail in layers. Progress comes from fixing the layer beneath the visible error."**
+> **"Production systems don't fail once — they fail in layers. Progress comes from fixing the layer beneath the visible error."**
 
 That mindset is what ultimately completed this project.
 
